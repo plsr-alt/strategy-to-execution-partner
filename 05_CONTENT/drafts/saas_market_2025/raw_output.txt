@@ -1,0 +1,81 @@
+{
+  "market_definition": "SaaS 市場とは、SaaS ソリューションを提供する企業やサービスに関する情報を扱う市場である。",
+  "market_size": [
+    {
+      "year": 2020,
+      "value": 1030,
+      "unit": "億ドル",
+      "assumption": "ガートナー調査",
+      "source": "https://www.gartner.com/en/research/notes/3941415"
+    },
+    {
+      "year": 2022,
+      "value": 1450,
+      "unit": "億ドル",
+      "assumption": "ガートナー調査",
+      "source": "https://www.gartner.com/en/research/notes/3941415"
+    }
+  ],
+  "players": [
+    {
+      "tier": "Tier1",
+      "name": "Salesforce",
+      "description": "クラウドベースのCRMソリューション",
+      "source": "https://www.salesforce.com/jp/company/executive-team/keiji-nobori/"
+    },
+    {
+      "tier": "Tier1",
+      "name": "Microsoft",
+      "description": "Power Platformを含むクラウドベースのアプリケーション",
+      "source": "https://www.microsoft.com/jp/"
+    },
+    {
+      "tier": "Tier2",
+      "name": "Google",
+      "description": "G Suiteなどのクラウドベースのサービス",
+      "source": "https://cloud.google.com/"
+    },
+    {
+      "tier": "Tier2",
+      "name": "Adobe",
+      "description": "Experience Cloudなどのクラウドベースのサービス",
+      "source": "https://www.adobe.com/jp/"
+    }
+  ],
+  "trends": [
+    {
+      "trend": "SaaS バブルは終わった",
+      "impact": "市場の成長が期待されたが、実際には減少になりそうであるため、企業は十分に対応していないと考えられる。",
+      "source": "Web 検索"
+    },
+    {
+      "trend": "給料の減少が過半",
+      "impact": "企業は、従業員への給料の減少を検討する可能性が増えているため、従業員のmotivationが下がりそうである。",
+      "source": "Web 植物検索"
+    },
+    {
+      "trend": "定年後の再雇用の厳しい現実",
+      "impact": "企業は、定年後の従業員の再雇用を検討していることを検討する可能性が増えているため、企業は従業員に対してより強い支援が必要となる可能性がある。",
+      "source": "Web 植物検索"
+    },
+    {
+      "trend": "ホンダのベスペードは2027年日本でデビューか?",
+      "impact": "ホンダのベスペードは新しいトレンドとなる可能性が高く、それに沿ったビジネス戦略を検討する企業はある。",
+      "source": "Web 検索"
+    }
+  ],
+  "implications": [
+    {
+      "message": "参入可能性は高く、市場規模の成長が見込まれる。",
+      "priority": "High"
+    },
+    {
+      "message": "リスクは低くないが、企業は従業員への給料の減少を検討する可能性が増えており、従業員のmotivationが下がりそうである。",
+      "priority": "Medium"
+    },
+    {
+      "message": "優先度付きビジネス示唆：企業としては、従業員への給料の減少を検討していることを検討し、従業員に対してより強い支援が必要となる可能性がある。",
+      "priority": "High"
+    }
+  ],
+  "sources": ["https://www.gartner.com/en/research/notes/3941415", "https://www.salesforce.com/jp/company/executive-team/keiji-nobori/", "https://cloud.google.com/", "https://www.adobe.com/jp/", "https://www.microsoft.com/jp/"]

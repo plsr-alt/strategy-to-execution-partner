@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pandoc:*)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e:*)",
+      "Bash(node sample_gen.mjs:*)",
+      "Bash(zip -r:*)"
+    ]
+  }
+}

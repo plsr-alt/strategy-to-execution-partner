@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 不要な旧ファイル（任意で削除）
+10_SKILLS/*.md.old
+
+# アーカイブZip（容量節約）
+*.zip
+
+# エディタ
+.vscode/
+*.swp
+
+# 機密ファイル
+*_secret*
+.env
+*.env
+
+# 別リポジトリ・バックアップフォルダ
+html-gen/
+sagyo/
+
+# Node.js
+node_modules/
+
+# Windows artifacts
+nul
