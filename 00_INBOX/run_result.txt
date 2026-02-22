@@ -1,0 +1,24 @@
+Slide size: 10.00" x 5.62"  (v3: 17 slides)
+GUI 2カラムスライド作成完了.
+Saved: C:/Users/tshibasaki/Documents/03.案件情報/2025_案件/ウッドワン/02-ポストセールス/021-実施ステップ/0211-管理資料/AWS-065352-01-報告会資料_20260224_v4.pptx
+
+== スライド構成 (v4, 17 枚) ==
+  Slide 01: ファイルサーバー移行/支援完了報告
+  Slide 02: 本資料の目的
+  Slide 03: アジェンダ
+  Slide 04: 背景・目的の振り返り
+  Slide 05: ご依頼背景・目的の認識合わせ（背景・前提）
+  Slide 06: ご依頼背景・目的の認識合わせ（ご期待範囲）
+  Slide 07: ご報告
+  Slide 08: ご支援結果
+  Slide 09: 納品物一覧
+  Slide 10: 本番切替後の対応事項①：クォータ
+  Slide 11: 本番切替後の対応事項②：ボリュームサイズ変更
+  Slide 12: 本番切替後の対応事項③：AWS Backup
+  Slide 13: 今後のご計画について
+  Slide 14: 今後のご計画について
+  Slide 15: FSx for NetApp ONTAP 運用のポイント
+  Slide 16: FSx for NetApp ONTAP の管理方法
+  Slide 17: 17
+
+---STDERR---

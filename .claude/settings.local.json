@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pandoc:*)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e:*)",
+      "Bash(node sample_gen.mjs:*)",
+      "Bash(zip -r:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(gh auth:*)",
+      "Bash(git --version)",
+      "Bash(where git:*)",
+      "Bash(git ls-remote:*)",
+      "Bash(git -C /tmp/nutanix-study config:*)",
+      "Bash(git -C /tmp/nutanix-study config user.name)",
+      "Bash(git -C \"C:/Users/tshibasaki/AppData/Local/Temp/nutanix-study\" config --global user.email)",
+      "Bash(git -C \"C:/Users/tshibasaki/AppData/Local/Temp/nutanix-study\" config --global user.name)",
+      "Bash(git config:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git -c:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git clone:*)",
+      "Bash(git init:*)",
+      "Bash(git commit:*)",
+      "Bash(date:*)",
+      "Bash(time:*)",
+      "Bash(xargs:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:docs.netapp.com)",
+      "Bash(wsl --version:*)",
+      "Bash(wsl bash -c \"python3 --version && which python3\")",
+      "Bash(wsl bash:*)"
+    ]
+  }
+}
