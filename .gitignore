@@ -15,6 +15,10 @@ desktop.ini
 # アーカイブZip（容量節約）
 *.zip
 
+# 生成物・作業ディレクトリ（バックアップ不要）
+html-gen/
+sagyo/
+
 # エディタ
 .vscode/
 *.swp
