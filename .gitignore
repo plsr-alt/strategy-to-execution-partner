@@ -15,10 +15,6 @@ desktop.ini
 # アーカイブZip（容量節約）
 *.zip
 
-# 生成物・作業ディレクトリ（バックアップ不要）
-html-gen/
-sagyo/
-
 # エディタ
 .vscode/
 *.swp
@@ -28,11 +24,9 @@ sagyo/
 .env
 *.env
 
-# 別リポジトリ・バックアップフォルダ
+# 別リポジトリ・バックアップフォルダ・生成物
 html-gen/
 sagyo/
-
-# Node.js
 node_modules/
 
 # Windows artifacts
