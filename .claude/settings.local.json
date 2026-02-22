@@ -33,7 +33,13 @@
       "WebFetch(domain:docs.netapp.com)",
       "Bash(wsl --version:*)",
       "Bash(wsl bash -c \"python3 --version && which python3\")",
-      "Bash(wsl bash:*)"
+      "Bash(wsl bash:*)",
+      "Bash(schtasks:*)",
+      "Bash(cmd /c schtasks /create /tn \"DailyGitPush_TaskFolder\" /tr \"powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"C:\\\\Users\\\\tshibasaki\\\\Desktop\\\\etc\\\\work\\\\task\\\\auto_push.ps1\"\"\" /sc daily /st 23:00 /f)",
+      "Bash(powershell -Command:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
