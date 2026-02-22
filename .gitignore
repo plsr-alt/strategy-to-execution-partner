@@ -24,11 +24,9 @@ desktop.ini
 .env
 *.env
 
-# 別リポジトリ・バックアップフォルダ
+# 別リポジトリ・バックアップフォルダ・生成物
 html-gen/
 sagyo/
-
-# Node.js
 node_modules/
 
 # Windows artifacts
