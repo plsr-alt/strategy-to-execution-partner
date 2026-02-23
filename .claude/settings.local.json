@@ -39,7 +39,9 @@
       "Bash(powershell -Command:*)",
       "Bash(git checkout:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git reset:*)",
+      "WebFetch(domain:www.kikakusyo.com)"
     ]
   }
 }
