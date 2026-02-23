@@ -1,43 +1,13 @@
 import { XaiClient } from '../xai/client';
-import { Post, ClusterSchema, FinalOutputSchema } from '../schemas/xrsSchema';
+import { Post, ClusterSchema, FinalOutputSchema, ContentIdeaSchema } from '../schemas/xrsSchema';
 import { z } from 'zod';
+import { buildRenderPrompt } from '../templates/prompts';
 
 export async function renderFinalOutput(client: XaiClient, clusters: z.infer<typeof ClusterSchema>[], allPosts: Post[], targetCount: number): Promise<string> {
     const postTexts = allPosts.slice(0, 50).map(p => `[ID: ${p.id}, URL: ${p.url}, Likes: ${p.metrics?.likes || 0}] ${p.text.substring(0, 200)}`).join('\n---\n');
     const clustersJson = JSON.stringify(clusters, null, 2);
 
-    const prompt = `You are a professional content strategist for X (Twitter).
-Based on the provided Clusters and a sample of Posts, generate exactly ${targetCount} content material ideas.
-Do NOT directly quote long texts. Use short summaries or paraphrasing.
-ABSOLUTELY NO financial advice, buy/sell recommendations, or price targets. Instead, provide a 1-line warning/disclaimer if the topic borders on investing.
-
-Posts sample:
-${postTexts}
-
-Clusters identified:
-${clustersJson}
-
-Output MUST be a valid JSON object matching this structure:
-{
-  "clustersOverview": [
-    { "clusterName": "Name", "description": "Brief desc", "urls": ["url1", "url2"] }
-  ],
-  "strategicThemes": [ "Theme 1", "Theme 2", "Theme 3" ],
-  "materials": [
-    {
-      "url": "source url",
-      "summary": "1-2 line summary in your own words",
-      "metrics": "Likes: 100, Repos: 10 (or unknown)",
-      "successHypothesis": ["Reason 1", "Reason 2"],
-      "postIdeaInvestor": "Idea tailored for investors (neutral tone)",
-      "postIdeaEngineer": "Idea tailored for engineers",
-      "hooks": ["Hook 1", "Hook 2", "Hook 3"],
-      "warning": "Disclaimer if needed"
-    }
-  ]
-}
-Ensure there are exactly ${targetCount} items in "materials".
-Strictly output ONLY valid JSON without any surrounding markdown formatting (\`\`\`json).`;
+    const prompt = buildRenderPrompt(postTexts, clustersJson, targetCount);
 
     const messages = [
         { role: 'system' as const, content: 'You are an expert X/Twitter content strategist. You strictly format output as valid JSON without markdown tags.' },
@@ -71,7 +41,7 @@ Strictly output ONLY valid JSON without any surrounding markdown formatting (\`\
         md += '\n';
 
         md += `## 素材一覧 (${data.materials.length}件)\n\n`;
-        data.materials.forEach((m, idx) => {
+        data.materials.forEach((m: z.infer<typeof ContentIdeaSchema>, idx: number) => {
             md += `### ${idx + 1}. 素材ソース\n`;
             md += `- **URL**: ${m.url}\n`;
             md += `- **エンゲージ指標**: ${m.metrics}\n`;
@@ -80,7 +50,7 @@ Strictly output ONLY valid JSON without any surrounding markdown formatting (\`\
             md += `- **ネタ案 (投資家向け)**: ${m.postIdeaInvestor}\n`;
             md += `- **ネタ案 (エンジニア向け)**: ${m.postIdeaEngineer}\n`;
             md += `- **フック案**:\n`;
-            m.hooks.forEach(h => md += `  - ${h}\n`);
+            m.hooks.forEach((h: string) => md += `  - ${h}\n`);
             if (m.warning) {
                 md += `- **⚠️ 注意**: ${m.warning}\n`;
             }
@@ -88,7 +58,7 @@ Strictly output ONLY valid JSON without any surrounding markdown formatting (\`\
         });
 
         md += `## 参照URL一覧\n\n`;
-        data.materials.forEach((m) => {
+        data.materials.forEach((m: z.infer<typeof ContentIdeaSchema>) => {
             md += `- ${m.url}\n`;
         });
 

@@ -9,7 +9,8 @@
     "scripts": {
         "build": "tsc",
         "start": "node dist/cli.js",
-        "dev": "tsx src/cli.ts"
+        "dev": "tsx src/cli.ts",
+        "test": "vitest run"
     },
     "dependencies": {
         "commander": "^12.0.0",
