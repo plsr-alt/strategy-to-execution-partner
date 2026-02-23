@@ -575,6 +575,121 @@ browser-useを導入し、「スクリーンショット自動撮影 + 手順書
 
 ---
 
+## 5. 追加候補（2026-02-23 補足調査）
+
+> 第1回調査で未カバーだった候補。ブラウザ自動化以外のアプローチも含む。
+
+---
+
+### 5-1. OpenAI Operator / CUA（Computer Use Agent）
+
+**概要**: OpenAIが2025年1月リリースしたブラウザ操作エージェント。GPT-4oベースでChatGPT Proユーザー向けに提供。APIとしてはCUA（Computer Use Agent）と呼ばれる。
+
+| 項目 | 内容 |
+|------|------|
+| コスト | ChatGPT Pro: $200/月 / API: 従量課金（GPT-4oトークン費） |
+| Python対応 | ✅ Responses API経由 |
+| AWS東京 | ❌ OpenAI API（Bedrock経由不可） |
+| スクショ | ✅ |
+| 認証セッション | △ 自前実装が必要 |
+
+**runbook用途への評価**: ❌ 非推奨
+- Bedrock・IAM統合が不可（OpenAI APIのみ）
+- コスト・セキュリティともに本プロジェクト要件に合わない
+
+---
+
+### 5-2. Multion
+
+**概要**: 「人間に代わってWebを操作するAIエージェント」を標榜するSaaS。APIで外部から呼び出し可能。
+
+| 項目 | 内容 |
+|------|------|
+| コスト | 有料SaaS（従量課金、詳細非公開） |
+| Python対応 | ✅ Python SDK |
+| AWS東京 | ❌ Multion社のクラウド上で実行 |
+| スクショ | ✅ |
+| 認証セッション | △ |
+
+**runbook用途への評価**: ❌ 非推奨
+- AWSコンソールの認証情報を外部SaaSに渡す構成はセキュリティ上NG
+- 社外サービスに依存するため、エンタープライズ要件に合わない
+
+---
+
+### 5-3. CrewAI + BrowserTool（既存プロジェクト流用）
+
+**概要**: 本プロジェクトですでに使用しているCrewAIに、BrowserTool（ScrapeWebsiteTool等）を追加する構成。
+
+```python
+from crewai_tools import ScrapeWebsiteTool, SeleniumScrapingTool
+
+browser_tool = SeleniumScrapingTool()
+agent = Agent(
+    role="AWSコンソール操作エージェント",
+    tools=[browser_tool],
+    ...
+)
+```
+
+**runbook用途への評価**: △ 限定的
+- CrewAIのBrowserToolはスクレイピング特化で、インタラクティブなSPA操作（クリック・フォーム入力）には弱い
+- ただし「調査→手順書生成」のマルチエージェントパイプラインにCrewAIを組み込む用途なら有効
+- **既存のCrewAI資産を活かしつつ、ブラウザ操作はPlaywrightに任せる**ハイブリッド構成が現実的
+
+---
+
+### 5-4. Robocorp
+
+**概要**: PythonベースのOSS RPAプラットフォーム。Robot Framework + PlaywrightをPythonで扱える。CI/CD統合に強い。
+
+| 項目 | 内容 |
+|------|------|
+| コスト | OSS無料（クラウド版は有料） |
+| Python対応 | ✅ |
+| AWS東京 | ✅ セルフホスト可 |
+| スクショ | ✅ |
+| 認証セッション | ✅ Vault機能あり |
+
+**runbook用途への評価**: △ 中立
+- Playwright直接使用より抽象化レイヤーが増えてデバッグが難しくなる
+- エンタープライズRPA・CI/CDパイプライン組み込みには有効
+- 本PoCフェーズには過剰
+
+---
+
+### 5-5. 【別アプローチ】AWS Systems Manager（ブラウザ不要）
+
+~~**概要**: AWS SDK/CLI + SSM Documents で直接自動化するアプローチ~~
+
+**❌ 本プロジェクト対象外（2026-02-24 確認）**
+- 本PJの要件は「AWSコンソール（GUI）を操作 → スクリーンショット取得 → AIが画面を読み取って手順書生成」
+- コマンドが登場する場面はあるが、あくまでUIキャプチャが主体
+- コマンドベース手順書が目的ではないため、SSMアプローチは不適合
+
+---
+
+## 6. 全候補 最終比較表（更新版）
+
+| # | ツール | コスト | 東京 | AWS認証 | Python | 本PJ推奨 |
+|---|--------|--------|------|---------|--------|---------|
+| 1 | Playwright + LLM Vision | 無料+LLMトークン | ✅ | ✅CDP | ✅ | ⭐⭐⭐⭐⭐ |
+| 2 | browser-use | 無料+LLMトークン | ✅ | △ | ✅ | ⭐⭐⭐⭐ |
+| 3 | Bedrock AgentCore Browser | 秒課金・待機無料 | ✅ | ✅IAM | ✅ | ⭐⭐⭐⭐ |
+| 4 | Anthropic Computer Use | $3〜15/Mtoken | ✅Bedrock | △ | ✅ | ⭐⭐⭐ |
+| 5 | Skyvern | 無料（OSS） | ✅ | △ | ✅ | ⭐⭐⭐ |
+| 6 | CrewAI + BrowserTool | 無料+LLMトークン | ✅ | △ | ✅ | ⭐⭐（ハイブリッド） |
+| 7 | AWS SSM（別アプローチ） | 無料 | ✅ | ✅IAM | ✅ | ❌（UI不要時のみ・本PJ対象外） |
+| 8 | Steel Browser | 無料100h/月 | ✅ | △ | ✅ | ⭐⭐ |
+| 9 | AgentQL | 無料〜$99/月 | ✅ | △ | ✅ | ⭐⭐ |
+| 10 | OpenAI Operator/CUA | $200/月〜 | ❌ | ❌ | ✅ | ❌ |
+| 11 | Multion | 有料SaaS | ❌ | ❌ | ✅ | ❌ |
+| 12 | Robocorp | 無料（OSS） | ✅ | ✅ | ✅ | ⭐（PoC過剰） |
+| 13 | Stagehand | $20〜$99/月 | ✅ | △ | △ | ⭐ |
+| 14 | Nova Act | $4.75/時間 | ❌US Eastのみ | ✅ | ✅ | ❌ |
+
+---
+
 ## 参考リンク
 
 - [browser-use GitHub](https://github.com/browser-use/browser-use)
