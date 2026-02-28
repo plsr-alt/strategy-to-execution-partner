@@ -1,6 +1,6 @@
 # auto_push.ps1 — 毎日23:00に差分をコミット＆プッシュ
-$repoPath = "C:\Users\tshibasaki\Desktop\etc\work\task"
-$logFile  = "$repoPath\auto_push.log"
+$repoPath = "C:\Users\tshibasaki\Desktop\etc\work\task\strategy-to-execution-partner"
+$logFile  = "$repoPath\.claude\auto_push.log"
 $branch   = "master"
 
 function Log($msg) {
