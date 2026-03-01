@@ -1,0 +1,87 @@
+name: Daily Auto Commit & Merge
+
+on:
+  schedule:
+    # 毎日 14:00 UTC = JST 23:00
+    - cron: '0 14 * * *'
+  workflow_dispatch:  # 手動トリガーもサポート
+
+jobs:
+  daily-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create feature branch
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          BRANCH="feature/$(date +%Y-%m-%d)-daily-updates"
+          git checkout -b "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Stage and commit changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git add -A
+          git commit -m "feat: $(date +%Y-%m-%d) 日次更新 — 自動コミット
+
+          Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+      - name: Push to remote
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git push -u origin "$BRANCH"
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.BRANCH }}
+          base: master
+          title: "feat: ${{ env.BRANCH }}"
+          body: |
+            ## 自動日次更新
+
+            このPRは自動化ワークフローにより自動生成されました。
+            実行時刻: ${{ github.event.schedule }}
+          delete-branch: false
+          draft: false
+
+      - name: Merge Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          gh pr merge ${{ steps.cpr.outputs.pull-request-number }} \
+            --merge \
+            --admin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log execution result
+        if: always()
+        run: |
+          RESULT="${{ job.status }}"
+          COMMIT_HASH=$(git rev-parse HEAD 2>/dev/null || echo "N/A")
+          echo "実行日時: $(date)" >> auto_commit_logs.txt
+          echo "ステータス: $RESULT" >> auto_commit_logs.txt
+          echo "コミット: $COMMIT_HASH" >> auto_commit_logs.txt
+          echo "---" >> auto_commit_logs.txt

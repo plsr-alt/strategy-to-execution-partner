@@ -27,16 +27,15 @@ if [[ -z "$TOPIC" || -z "$OUTDIR" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV="$SCRIPT_DIR/.venv"
+VENV="/home/crewai/.venv"
 
 # ── venv チェック ────────────────────────────────────────────
 if [[ ! -d "$VENV" ]]; then
     echo "[ERROR] venv が見つかりません: $VENV"
     echo ""
     echo "以下を実行してセットアップしてください:"
-    echo "  cd \"$SCRIPT_DIR\""
-    echo "  python3 -m venv .venv"
-    echo "  source .venv/bin/activate"
+    echo "  python3 -m venv /home/crewai/.venv"
+    echo "  source /home/crewai/.venv/bin/activate"
     echo "  pip install -r requirements.txt"
     exit 1
 fi
