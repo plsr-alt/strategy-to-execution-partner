@@ -28,7 +28,7 @@ Claude Code が report.json を受け取り PPT / Markdown を生成する。
 
 ```bash
 cd /mnt/c/Users/tshibasaki/Desktop/etc/work/task/04_RESEARCH/agents/market_research_crewai
-source .venv/bin/activate
+source /home/crewai/.venv/bin/activate
 
 # ── Groq で実行（無料・おすすめ） ──
 python run.py \
@@ -100,10 +100,9 @@ python run.py \
 ## 初回セットアップ（済み）
 
 ```bash
-# WSL で実行済み
-cd /mnt/c/Users/tshibasaki/Desktop/etc/work/task/04_RESEARCH/agents/market_research_crewai
-python3 -m venv .venv
-source .venv/bin/activate
+# WSL で実行済み（venvはLinuxネイティブ側に配置＝高速）
+python3 -m venv /home/crewai/.venv
+source /home/crewai/.venv/bin/activate
 pip install crewai crewai-tools python-dotenv
 ```
 
