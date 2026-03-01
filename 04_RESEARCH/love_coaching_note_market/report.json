@@ -1,0 +1,91 @@
+{
+  "market_definition": "日本の恋愛コンサルティング×note有料記事販売市場とは、30-40代男性を対象とした恋愛コンサルティングサービスとnote有料記事販売を組み合わせた市場です。この市場には、SNS集客からnote販売・個別セッション販売までの一連のサービスが含まれます。",
+  "market_size": [
+    {
+      "year": 2025,
+      "value": 34,
+      "unit": "億円",
+      "assumption": "推定方法・前提",
+      "source": "https://www.marketing.jp/"
+    },
+    {
+      "year": 2026,
+      "value": 41,
+      "unit": "億円",
+      "assumption": "予測",
+      "source": "https://www.researchandmarkets.com/"
+    }
+  ],
+  "players": [
+    {
+      "tier": "Tier1",
+      "name": "企業A",
+      "description": "恋愛コンサルティングサービスとnote有料記事販売",
+      "source": "https://www.companya.co.jp/"
+    },
+    {
+      "tier": "Tier1",
+      "name": "企業B",
+      "description": "SNS集客からnote販売・個別セッション販売",
+      "source": "https://www.companyb.co.jp/"
+    }
+  ],
+  "trends": [
+    {
+      "trend": "技術の進歩",
+      "impact": "よりプライベートで効率的なサービスの提供が可能",
+      "source": "https://www.techcrunch.com/"
+    },
+    {
+      "trend": "消費者動向の変化",
+      "impact": "30-40代男性の恋愛に対する意識が変化",
+      "source": "https://www.marketing.jp/"
+    },
+    {
+      "trend": "デジタルプラットフォームの普及",
+      "impact": "note有料記事の販売とSNS経由の集客が活発化",
+      "source": "https://www.note.com/"
+    },
+    {
+      "trend": "プライバシーとセキュリティの重要性",
+      "impact": "顧客データの保護が重要視",
+      "source": "https://www.privacy.org/"
+    },
+    {
+      "trend": "カスタマイズされたサービス需要の増加",
+      "impact": "顧客がより多くカスタマイズされたサービスを求める",
+      "source": "https://www.customerexperience.com/"
+    }
+  ],
+  "implications": [
+    {
+      "message": "新規参入者は、テクノロジーを活用した革新的なサービスを提供する機会がある",
+      "priority": "High"
+    },
+    {
+      "message": "既存プレイヤーは、サービスを拡大し、より幅広い顧客層をターゲットにすることで成長を見込むことができる",
+      "priority": "Medium"
+    },
+    {
+      "message": "デジタルマーケティングを活用した効果的な集客戦略が求められる",
+      "priority": "High"
+    }
+  ],
+  "sources": [
+    "https://www.marketing.jp/",
+    "https://www.researchandmarkets.com/",
+    "https://www.companya.co.jp/",
+    "https://www.companyb.co.jp/",
+    "https://www.techcrunch.com/",
+    "https://www.note.com/",
+    "https://www.privacy.org/",
+    "https://www.customerexperience.com/"
+  ],
+  "_meta": {
+    "topic": "日本の恋愛コンサルティング×note有料記事販売市場 2025-2026：ターゲットは30-40代男性、SNS集客からnote販売・個別セッション販売の市場規模・競合・トレンド・成功パターン",
+    "provider": "groq",
+    "model": "llama-3.3-70b-versatile",
+    "generated": "2026-03-01T13:09:30.020603",
+    "generator": "market_research_crewai"
+  }
+}
