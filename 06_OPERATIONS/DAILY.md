@@ -1,13 +1,14 @@
 # Daily Log
 
-## 今日の日付: 2026-03-01
+## 今日の日付: 2026-03-02
 
 ### 今日のゴール（最大5つ）
-- [ ] ウッドワン様リストア手順書修正
-- [ ] PCフォルダ履歴復旧
+- [ ] X土台構築（バイオ・固定ポスト・プロフ画像）— 30分
+- [ ] X投稿 2本（05_x_posts.md #1, #2）
 - [ ] 英語勉強（TOEIC 60分：金フレ50語＋Part5 15問＋Part6 1セット＋Listening 10分）
-- [x] 恋愛改善設計士 ビジネスフレームワーク構築
-- [ ] 上記全納品物レビュー
+- [ ] コメダ様ファイルサーバー移行支援 — 支援見積もり用ヒアリング
+- [x] ウッドワン様リストア手順書修正
+- [x] PCフォルダ履歴復旧
 
 ### 実行ログ
 | 時間 | やったこと | 備考 |
@@ -19,6 +20,7 @@
 | AM | 5日間実行チェックリスト作成 | `03_PROJECTS/love_improvement_designer/09_5day_checklist.md` |
 | AM | 有料note記事（500円版）下書き | `03_PROJECTS/love_improvement_designer/10_paid_note_draft.md` |
 | AM | WSL+Groq市場調査キック | litellm追加インストール→再実行中 |
+| PM | VibeMatch PJ立ち上げ | `03_PROJECTS/vibe_match/` PRD・アーキ・タスク・調査一式 |
 
 ### 発生した課題・気づき
 - CrewAI の Groq 連携に litellm パッケージが必要だった（pip install litellm で解決）

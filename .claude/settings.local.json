@@ -42,7 +42,11 @@
       "Bash(git stash:*)",
       "Bash(git reset:*)",
       "WebFetch(domain:www.kikakusyo.com)",
-      "WebFetch(domain:www.accenture.com)"
+      "WebFetch(domain:www.accenture.com)",
+      "Bash(git remote add origin https://github.com/plsr-alt/strategy-to-execution-partner)",
+      "Bash(wsl -e bash -c 'curl -s -H \"\"Authorization: token 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\"\" https://api.github.com/repos/plsr-alt/strategy-to-execution-partner/commits?per_page=5 | python3 -c \"\":*)",
+      "Bash(wsl python3 -m pip install python-pptx --quiet)",
+      "Bash(cmd /c \"dir \"\"C:\\\\Users\\\\tshibasaki\\\\Documents\\\\03.案件情報\\\\2026\\\\コメダ\\\\064195_ファイルサーバ構築\\\\01-プリセールス\\\\012-提案資料\\\\*.pptx\"\" 2>nul | findstr comeda\")"
     ]
   }
 }

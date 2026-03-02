@@ -1,0 +1,38 @@
+# AI推論サービス → Google Cloud Run デプロイ
+name: Deploy AI Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/ai/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          cd services/ai
+          gcloud run deploy vibematch-ai \
+            --source . \
+            --region asia-northeast1 \
+            --memory 2Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --allow-unauthenticated
