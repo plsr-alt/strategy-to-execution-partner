@@ -39,11 +39,22 @@ mkdir -p "$PROJECT_DIR/tmp"
 # 仮想環境を有効化
 # ============================================================
 log_info "仮想環境を初期化中..."
-if [ -f "/home/ubuntu/venv/bin/activate" ]; then
-    source /home/ubuntu/venv/bin/activate
-    log_info "仮想環境: /home/ubuntu/venv"
+
+# ホームディレクトリを自動検出
+if [ -d "/home/ec2-user" ]; then
+    HOME_DIR="/home/ec2-user"
+elif [ -d "/home/ubuntu" ]; then
+    HOME_DIR="/home/ubuntu"
 else
-    log_error "仮想環境が見つかりません: /home/ubuntu/venv"
+    log_error "ホームディレクトリが見つかりません"
+    exit 1
+fi
+
+if [ -f "$HOME_DIR/venv/bin/activate" ]; then
+    source "$HOME_DIR/venv/bin/activate"
+    log_info "仮想環境: $HOME_DIR/venv"
+else
+    log_error "仮想環境が見つかりません: $HOME_DIR/venv"
     exit 1
 fi
 
@@ -53,6 +64,7 @@ fi
 if [ ! -f "$PROJECT_DIR/.env" ]; then
     log_error ".env ファイルが見つかりません"
     log_error "以下を実行してください: cp .env.example .env && nano .env"
+    log_error "パス: $PROJECT_DIR/.env"
     exit 1
 fi
 
@@ -61,7 +73,7 @@ set -a
 source "$PROJECT_DIR/.env"
 set +a
 
-log_info "環境変数をロード完了"
+log_info "✅ 環境変数をロード完了"
 
 # ============================================================
 # Dependency チェック
@@ -97,11 +109,11 @@ if python3 youtube_pipeline.py \
     >> "$LOG_FILE" 2>&1; then
 
     log_info "=================================================="
-    log_info "✅ パイプライン完了！"
+    log_info "✅ パイプライン完了！！"
     log_info "=================================================="
     log_info ""
-    log_info "出力ファイル:"
-    ls -lh "$LOG_DIR"/final_*.mp4 2>/dev/null || log_info "  動画ファイルなし"
+    log_info "📹 出力ファイル:"
+    ls -lh "$LOG_DIR"/final_*.mp4 2>/dev/null || log_info "   (動画ファイル生成待機中)"
     log_info ""
     log_info "ログファイル: $LOG_FILE"
 
