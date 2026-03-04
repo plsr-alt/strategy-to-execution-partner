@@ -1,0 +1,94 @@
+# ============================================================
+# 動画自動編集パイプライン — 設定ファイル
+# ============================================================
+
+# --- 入出力 ---
+input_dir: "./in"
+output_dir: "./out"
+assets_dir: "./assets"
+dict_file: "./dict/terms.csv"
+temp_dir: "./tmp"
+
+# --- 無音カット ---
+silence:
+  noise_threshold_db: -35       # この dB 以下を「無音」とする
+  min_silence_duration: 0.35    # 無音がこの秒数以上続いたらカット候補
+  padding_before: 0.08          # カット前に残すパディング（秒）
+  padding_after: 0.05           # カット後に残すパディング（秒）
+  min_segment_duration: 0.3     # これ以下の短い有音区間はカットしない（ノイズ除去）
+
+# --- テンポ調整（ハイパースキップ） ---
+tempo:
+  enabled: true
+  # 単語密度がこの値以下のセグメントを「冗長」とみなす（words/sec）
+  low_density_threshold: 1.5
+  # 冗長区間の速度倍率（1.0 = 等速）
+  speedup_factor: 1.25
+  # 速度変更の最大値（安全上限）
+  max_speed: 1.35
+  # この秒数以上の有音セグメントのみテンポ調整対象
+  min_segment_for_tempo: 2.0
+  # 早口（この words/sec 以上）は速度変更しない
+  fast_speech_threshold: 4.5
+
+# --- 文字起こし ---
+transcription:
+  model_size: "base"            # tiny / base / small / medium / large-v2
+  language: "ja"                # 言語コード
+  device: "cpu"                 # cpu / cuda
+  compute_type: "int8"          # int8 / float16 / float32
+  beam_size: 5
+  vad_filter: true              # VADフィルタ有効化
+
+# --- 字幕 ---
+subtitle:
+  max_chars_per_line: 22        # 1行の最大文字数
+  min_chars_per_line: 15        # 1行の目安最小文字数（分割判定用）
+  max_lines: 2                  # 最大行数
+  min_display_sec: 0.8          # 最短表示時間（秒）
+  max_display_sec: 4.0          # 最長表示時間（秒）
+  # 焼き込みスタイル
+  style:
+    font_name: "Noto Sans CJK JP"
+    font_size: 24
+    primary_color: "&H00FFFFFF"   # 白（ASS形式: BBGGRR）
+    outline_color: "&H00000000"   # 黒
+    outline_width: 2
+    shadow: 1
+    alignment: 2                  # 下中央
+    margin_v: 30                  # 下からのマージン
+
+# --- 音声正規化 ---
+audio:
+  target_lufs: -16              # 目標ラウドネス
+  true_peak: -1.5               # トゥルーピーク上限
+  lra: 11                       # ラウドネスレンジ
+
+# --- 出力 ---
+output:
+  video_codec: "libx264"
+  audio_codec: "aac"
+  video_bitrate: "5M"
+  audio_bitrate: "192k"
+  pixel_format: "yuv420p"
+  # 画角: "16:9" / "9:16" / "auto"（元動画のまま）
+  aspect_ratio: "auto"
+
+# --- BGM ---
+bgm:
+  enabled: false
+  file: "./assets/bgm.mp3"
+  volume_db: -22                # BGM音量（dB）
+
+# --- オープニング/クロージング ---
+intro:
+  enabled: false
+  file: "./assets/intro.mp4"
+outro:
+  enabled: false
+  file: "./assets/outro.mp4"
+
+# --- ログ ---
+logging:
+  level: "INFO"                 # DEBUG / INFO / WARNING / ERROR
+  log_file: "./out/pipeline.log"
