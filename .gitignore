@@ -31,3 +31,4 @@ node_modules/
 
 # Windows artifacts
 nul
+.claude/settings.local.json

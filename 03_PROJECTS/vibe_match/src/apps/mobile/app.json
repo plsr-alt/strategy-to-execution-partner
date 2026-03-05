@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "VibeMatch",
+    "slug": "vibematch",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "vibematch",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.vibematch.ios",
+      "usesAppleSignIn": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      "expo-image-picker",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
