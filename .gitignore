@@ -32,3 +32,8 @@ node_modules/
 # Windows artifacts
 nul
 .claude/settings.local.json
+
+# 顧客用資料（GitHub管理外）
+00_INBOX/*.pptx
+05_CONTENT/**/*.pptx
+**/*コメダ*
