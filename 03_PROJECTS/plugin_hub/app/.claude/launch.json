@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "plugin-hub-dev",
+      "runtimeExecutable": "C:\\Users\\tshibasaki\\nodejs\\node-v22.14.0-win-x64\\npx.cmd",
+      "runtimeArgs": ["next", "dev"],
+      "port": 3000
+    }
+  ]
+}
