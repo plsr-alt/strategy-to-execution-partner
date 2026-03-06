@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,6 +20,11 @@ from typing import Dict, List, Optional
 import requests
 from dotenv import load_dotenv
 from groq import Groq
+
+# Pillow 10+ で ANTIALIAS が削除された問題の互換パッチ
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
 # ============================================================
 # 設定・定数
@@ -128,12 +134,18 @@ def generate_theme(theme_mode: str = "auto") -> dict:
     prompt = f"""あなたはYouTubeチャンネルのプロデューサーです。
 日本のサラリーマン向けに「{genre}」ジャンルの動画ネタを1つ提案してください。
 
+【重要な条件】
+- 15〜20分の長尺動画を前提とすること
+- 深掘り解説・実践的ノウハウを含む構成にすること
+- フックは視聴者が最初の5秒で「見なきゃ」と思う衝撃的な一文にすること
+- 具体的な数字（金額・%・期間）を必ず含めること
+
 以下のJSON形式のみで出力してください（説明不要）:
 {{
-  "theme": "具体的な動画タイトル案",
-  "keywords": ["キーワード1", "キーワード2", "キーワード3"],
-  "hook": "視聴者を引きつける最初の一言",
-  "duration_min": 8,
+  "theme": "具体的な動画タイトル案（数字・意外性を含む）",
+  "keywords": ["キーワード1", "キーワード2", "キーワード3", "キーワード4", "キーワード5"],
+  "hook": "視聴者を引きつける衝撃的な最初の一言（数字入り）",
+  "duration_min": {VIDEO_DURATION_MIN},
   "category": "{theme_mode if theme_mode != 'auto' else 'finance'}",
   "audience": "日本のサラリーマン"
 }}"""
@@ -169,105 +181,117 @@ def _groq_generate(client, prompt: str, max_tokens: int = 4096) -> str:
 
 
 def generate_script(theme: dict, language: str = "ja") -> str:
-    """Groq Llama で YouTube 動画台本をセクション別に生成（30分対応）"""
+    """Groq Llama で YouTube 動画台本をセクション別に生成（15-20分長尺対応）"""
     client = Groq(api_key=GROQ_API_KEY)
 
     theme_text = theme['theme']
     keywords = ', '.join(theme['keywords'])
     hook = theme['hook']
     audience = theme.get('audience', '日本のサラリーマン')
+    duration = f"{VIDEO_DURATION_MIN}〜{VIDEO_DURATION_MAX}分"
 
-    base_context = f"テーマ: {theme_text}\nキーワード: {keywords}\n対象: {audience}"
+    base_context = f"テーマ: {theme_text}\nキーワード: {keywords}\n対象: {audience}\n動画尺: {duration}"
 
-    # --- セクション1: フック + 導入 ---
+    # --- セクション1: フック + 導入（0:00〜3:00） ---
     logger.info("      📝 セクション1/4: フック+導入 生成中...")
-    sec1 = _groq_generate(client, f"""あなたはYouTubeクリエイターです。30分動画の台本の「フック」と「導入」パートを書いてください。
+    sec1 = _groq_generate(client, f"""あなたは視聴維持率の高いYouTubeクリエイターです。{duration}の長尺動画の台本の「フック」と「導入」パートを書いてください。
 
 {base_context}
 フック: {hook}
 
+【最重要】冒頭15秒で視聴者を完全に掴むこと。離脱されたら終わり。
+
 以下の形式で出力してください:
 
-[フック]
-視聴者を掴む問いかけや驚き。5〜8文で書いてください。
-具体的な数字や衝撃的な事実を入れてください。
+[フック — 0:00〜0:30]
+冒頭の掴み。視聴者が「え？マジ？」と思う衝撃的な事実や数字から始める。
+- 最初の1文は必ず具体的な数字を含めること（例: 「日本人の87%が知らない〜」）
+- 2文目で「この動画を見れば〜」と視聴の価値を明示
+- 3-5文で「でも実は〜」と意外な展開をチラ見せ
+- 計5〜8文
 
-[導入]
+[導入 — 0:30〜3:00]
 テーマの背景・なぜ今このテーマが重要かを詳しく説明。
-最新のデータや社会的背景を含めて、15文以上で書いてください。
-この動画を最後まで見るべき理由を明確にしてください。
+- 最新の2025-2026年のデータや社会的背景を含める
+- 「この動画では5つのポイントに分けて徹底解説します」と全体像を予告
+- 各ポイントの見出しを予告して「全部見てほしい」と促す
+- 15文以上
 
 各文の末尾には「...」を付けて間を示してください。""")
 
-    # --- セクション2: ポイント1〜3 ---
+    # --- セクション2: ポイント1〜3（3:00〜12:00） ---
     logger.info("      📝 セクション2/4: ポイント1〜3 生成中...")
-    sec2 = _groq_generate(client, f"""あなたはYouTubeクリエイターです。30分動画の台本の本題（前半）を書いてください。
+    sec2 = _groq_generate(client, f"""あなたは視聴維持率の高いYouTubeクリエイターです。{duration}の長尺動画の台本の本題（前半）を書いてください。
 
 {base_context}
 
 以下の3つのポイントを、それぞれ詳しく解説してください。
-各ポイントは5〜6分の尺になるよう、25文以上で具体的に書いてください。
+各ポイントは3〜4分の尺になるよう、20文以上で具体的に書いてください。
 
-ポイント1:（このテーマの基本・前提知識）
+【ポイント1: 基本・前提知識 — 3:00〜6:00】
 - 初心者にもわかるように基礎から説明
 - 具体的な数字やデータを3つ以上含める
 - 「例えば〜」で始まる具体例を2つ以上入れる
-- 25文以上
+- 20文以上
+- ★最後に「ここまでが基本ですが、次のポイント2ではさらに実践的な内容に踏み込みます」と次への橋渡し
 
-ポイント2:（実践的なノウハウ・やり方）
+【ポイント2: 実践的なノウハウ — 6:00〜9:00】
 - ステップバイステップで説明
 - 成功事例と失敗事例を対比
 - 「ここが重要なんですが〜」のような強調表現を使う
-- 25文以上
+- 20文以上
+- ★最後に「多くの人はここまでで満足しますが、次のポイント3を知らないと大損します」と煽り
 
-ポイント3:（意外な落とし穴・注意点）
+【ポイント3: 意外な落とし穴・注意点 — 9:00〜12:00】
 - 多くの人が見落としがちなポイント
 - データや統計で裏付け
 - 「実は〜」「意外にも〜」で始まる意外性のある情報
-- 25文以上
+- 20文以上
+- ★最後に「ここからが本番です。ポイント4では上級者向けの裏技をお伝えします」
 
 各文の末尾には「...」を付けて間を示してください。
 セクションタイトルは「ポイント1: 〇〇」の形式で出力してください。""", max_tokens=6000)
 
-    # --- セクション3: ポイント4〜5 ---
+    # --- セクション3: ポイント4〜5（12:00〜18:00） ---
     logger.info("      📝 セクション3/4: ポイント4〜5 生成中...")
-    sec3 = _groq_generate(client, f"""あなたはYouTubeクリエイターです。30分動画の台本の本題（後半）を書いてください。
+    sec3 = _groq_generate(client, f"""あなたは視聴維持率の高いYouTubeクリエイターです。{duration}の長尺動画の台本の本題（後半）を書いてください。
 
 {base_context}
 
 以下の2つのポイントを、それぞれ詳しく解説してください。
 
-ポイント4:（上級テクニック・差がつく方法）
+【ポイント4: 上級テクニック・差がつく方法 — 12:00〜15:00】
 - 知っている人だけが得をする情報
 - 具体的な比較（AとBではこれだけ差が出る）
 - 実際の事例やケーススタディ
-- 25文以上、5〜6分の尺
-
-ポイント5:（すぐに始められる実践アドバイス）
-- 今日から始められる具体的なアクション3〜5つ
-- 各アクションの期待される効果
-- 優先順位をつけて説明
 - 20文以上、3〜4分の尺
+- ★最後に「最後のポイント5では、今日から即実践できるアクションプランをお伝えします」
+
+【ポイント5: すぐに始められる実践アドバイス — 15:00〜18:00】
+- 今日から始められる具体的なアクション3〜5つ
+- 各アクションの期待される効果（具体的な数字付き）
+- 優先順位をつけて説明
+- 15文以上、2〜3分の尺
 
 各文の末尾には「...」を付けて間を示してください。
 セクションタイトルは「ポイント4: 〇〇」「ポイント5: 〇〇」の形式で出力してください。""", max_tokens=5000)
 
-    # --- セクション4: まとめ + CTA ---
+    # --- セクション4: まとめ + CTA（18:00〜20:00） ---
     logger.info("      📝 セクション4/4: まとめ+CTA 生成中...")
-    sec4 = _groq_generate(client, f"""あなたはYouTubeクリエイターです。30分動画の台本の「まとめ」と「CTA」を書いてください。
+    sec4 = _groq_generate(client, f"""あなたは視聴維持率の高いYouTubeクリエイターです。{duration}の長尺動画の台本の「まとめ」と「CTA」を書いてください。
 
 {base_context}
 
-[まとめ]
-- 動画全体の要点を振り返り、5つのポイントを簡潔に整理
-- 「今日お伝えした内容をまとめると〜」で始める
-- 視聴者への励ましやモチベーションを上げる言葉
-- 15文以上
+[まとめ — 18:00〜19:30]
+- 「では、今日お伝えした5つのポイントを振り返りましょう」で始める
+- 5つのポイントを各1-2文で簡潔に整理
+- 「この中で1つでも実践すれば、確実に結果が変わります」と励まし
+- 10文以上
 
-[CTA]
-- チャンネル登録・高評価・コメント欄への誘導
-- 次回の動画テーマの予告
-- 「コメント欄で教えてください」の形で視聴者参加を促す
+[CTA — 19:30〜20:00]
+- 「この動画が参考になったら高評価とチャンネル登録をお願いします」
+- 「コメント欄で『一番参考になったポイント番号』を教えてください」
+- 次回の動画テーマの予告（関連テーマ）
 - 5文以上
 
 各文の末尾には「...」を付けて間を示してください。""")
@@ -452,7 +476,7 @@ def edit_video(footage: list, voiceover_path: str, script: str,
                output_path: str, timestamp: str) -> str:
     """moviepy で素材を結合して動画を生成"""
     try:
-        from moviepy import (
+        from moviepy.editor import (
             VideoFileClip, ImageClip, AudioFileClip,
             concatenate_videoclips, CompositeVideoClip
         )
@@ -468,10 +492,10 @@ def edit_video(footage: list, voiceover_path: str, script: str,
 
         try:
             if item.get("type") == "image" or path.endswith(".png"):
-                clip = ImageClip(path, duration=dur).resized((1280, 720))
+                clip = ImageClip(path, duration=dur).resize((1280, 720))
             else:
-                clip = VideoFileClip(path).resized((1280, 720))
-                clip = clip.subclipped(0, min(dur, clip.duration))
+                clip = VideoFileClip(path).resize((1280, 720))
+                clip = clip.subclip(0, min(dur, clip.duration))
             clips.append(clip)
         except Exception as e:
             logger.warning(f"⚠️ クリップ読み込み失敗 {path}: {e}")
@@ -484,15 +508,15 @@ def edit_video(footage: list, voiceover_path: str, script: str,
         clips.extend(clips[:])
 
     video = concatenate_videoclips(clips, method="compose")
-    video = video.subclipped(0, min(target_duration, video.duration))
+    video = video.subclip(0, min(target_duration, video.duration))
 
     # 音声合成（音声が短くても動画の尺は維持する）
     if voiceover_path and Path(voiceover_path).exists():
         audio = AudioFileClip(voiceover_path)
         logger.info(f"   📊 音声尺: {audio.duration:.1f}秒 / 動画尺: {video.duration:.1f}秒")
         if audio.duration > video.duration:
-            audio = audio.subclipped(0, video.duration)
-        video = video.with_audio(audio)
+            audio = audio.subclip(0, video.duration)
+        video = video.set_audio(audio)
 
     # SRT 字幕生成
     srt_path = TEMP_DIR / f"subtitles_{timestamp}.srt"
@@ -563,57 +587,99 @@ def _fmt_time(seconds: float) -> str:
 # ============================================================
 
 def generate_thumbnail(theme: dict, output_path: str) -> str:
-    """PIL でYouTubeサムネイルを生成（1280x720px）"""
+    """PIL でYouTubeサムネイル生成（1280x720px）— 黒背景+白文字+黄アクセント"""
     from PIL import Image, ImageDraw, ImageFont
 
     width, height = 1280, 720
-    img = Image.new("RGB", (width, height), color=(26, 26, 46))
+    # 黒背景（完全な黒）
+    img = Image.new("RGB", (width, height), color=(10, 10, 10))
     draw = ImageDraw.Draw(img)
 
-    # グラデーション背景（疑似）
-    for y in range(height):
-        ratio = y / height
-        r = int(26 + ratio * 20)
-        g = int(26 + ratio * 10)
-        b = int(46 + ratio * 30)
-        draw.line([(0, y), (width, y)], fill=(r, g, b))
+    # 黄色アクセントライン（上下）
+    YELLOW = (255, 215, 0)
+    draw.rectangle([0, 0, width, 6], fill=YELLOW)
+    draw.rectangle([0, height - 6, width, height], fill=YELLOW)
 
-    # アクセントライン
-    draw.rectangle([0, height - 8, width, height], fill=(0, 212, 255))
-    draw.rectangle([0, 0, width, 8], fill=(0, 212, 255))
+    # 左サイド黄色アクセントバー
+    draw.rectangle([0, 80, 8, height - 80], fill=YELLOW)
 
-    # タイトルテキスト
+    # タイトルテキスト — 太め・大きめ・白
     title = theme.get("theme", "今週の注目テーマ")
-    # 長い場合は折り返し
-    if len(title) > 18:
+
+    # 日本語フォント試行（太字系優先）
+    font_large = None
+    font_medium = None
+    font_small = None
+    font_paths_bold = [
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    font_paths_regular = [
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for fp in font_paths_bold:
+        try:
+            font_large = ImageFont.truetype(fp, 72)
+            font_medium = ImageFont.truetype(fp, 48)
+            break
+        except Exception:
+            continue
+    for fp in font_paths_regular:
+        try:
+            font_small = ImageFont.truetype(fp, 32)
+            break
+        except Exception:
+            continue
+    if not font_large:
+        font_large = ImageFont.load_default()
+    if not font_medium:
+        font_medium = font_large
+    if not font_small:
+        font_small = ImageFont.load_default()
+
+    # タイトルを折り返し（最大3行）
+    if len(title) > 24:
+        # 3行に分割
+        chunk = len(title) // 3
+        title_lines = [title[:chunk], title[chunk:chunk*2], title[chunk*2:]]
+    elif len(title) > 14:
         mid = len(title) // 2
         title_lines = [title[:mid], title[mid:]]
     else:
         title_lines = [title]
 
-    # フォントサイズ（システムデフォルトフォールバック）
-    try:
-        font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 56)
-        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
-    except Exception:
-        font_large = ImageFont.load_default()
-        font_small = ImageFont.load_default()
-
-    # テキスト描画（縁取り + 本文）
-    y_start = height // 2 - len(title_lines) * 40
+    # メインタイトル描画（白文字 + 黒縁取り）
+    line_height = 90
+    y_start = height // 2 - len(title_lines) * line_height // 2
     for line in title_lines:
-        for dx, dy in [(-2,-2),(2,-2),(-2,2),(2,2)]:
-            draw.text((width//2 + dx, y_start + dy), line,
-                      font=font_large, fill=(0, 0, 0), anchor="mm")
+        # 太い縁取り（黒）
+        for dx in range(-3, 4):
+            for dy in range(-3, 4):
+                draw.text((width//2 + dx, y_start + dy), line,
+                          font=font_large, fill=(0, 0, 0), anchor="mm")
+        # 本文（白）
         draw.text((width//2, y_start), line,
                   font=font_large, fill=(255, 255, 255), anchor="mm")
-        y_start += 80
+        y_start += line_height
 
-    # キーワードタグ
-    keywords = theme.get("keywords", [])[:3]
-    kw_text = "  ".join([f"#{k}" for k in keywords])
-    draw.text((width//2, height - 40), kw_text,
-              font=font_small, fill=(0, 212, 255), anchor="mm")
+    # フック文（黄色・中サイズ — サムネで目を引くサブテキスト）
+    hook = theme.get("hook", "")
+    if hook and len(hook) > 5:
+        hook_display = hook[:30] + ("..." if len(hook) > 30 else "")
+        # 黄色背景バー
+        hook_y = 100
+        draw.rectangle([40, hook_y - 25, width - 40, hook_y + 30], fill=(255, 215, 0))
+        draw.text((width//2, hook_y), hook_display,
+                  font=font_medium, fill=(10, 10, 10), anchor="mm")
+
+    # 下部：キーワードタグ（白文字）
+    keywords = theme.get("keywords", [])[:4]
+    kw_text = "  |  ".join([f"#{k}" for k in keywords])
+    draw.text((width//2, height - 45), kw_text,
+              font=font_small, fill=(200, 200, 200), anchor="mm")
 
     img.save(output_path, "PNG", quality=95)
     logger.info(f"✅ サムネイル生成完了: {output_path}")
@@ -624,9 +690,53 @@ def generate_thumbnail(theme: dict, output_path: str) -> str:
 # Step 7: メタデータ最適化
 # ============================================================
 
+def _generate_chapters(script: str) -> str:
+    """台本からYouTubeチャプター用タイムスタンプを生成"""
+    chapters = ["0:00 はじめに"]
+
+    # セクションヘッダーを検出してチャプター化
+    section_patterns = [
+        (r'\[フック', '0:00 オープニング'),
+        (r'\[導入', '0:30 導入'),
+        (r'ポイント1[:：]?\s*(.+)', '3:00 {}'),
+        (r'ポイント2[:：]?\s*(.+)', '6:00 {}'),
+        (r'ポイント3[:：]?\s*(.+)', '9:00 {}'),
+        (r'ポイント4[:：]?\s*(.+)', '12:00 {}'),
+        (r'ポイント5[:：]?\s*(.+)', '15:00 {}'),
+        (r'\[まとめ', '18:00 まとめ'),
+    ]
+
+    chapters = []
+    for pattern, template in section_patterns:
+        match = re.search(pattern, script)
+        if match:
+            if '{}' in template and match.groups():
+                title = match.group(1).strip().rstrip('...。、')[:20]
+                chapters.append(template.format(title))
+            else:
+                chapters.append(template)
+
+    if not chapters:
+        # フォールバック: 基本チャプター
+        chapters = [
+            "0:00 はじめに",
+            "0:30 導入",
+            "3:00 ポイント1",
+            "6:00 ポイント2",
+            "9:00 ポイント3",
+            "12:00 ポイント4",
+            "15:00 ポイント5",
+            "18:00 まとめ",
+        ]
+
+    return "\n".join(chapters)
+
+
 def optimize_metadata(theme: dict, script: str) -> dict:
-    """Groq で YouTube SEO メタデータを生成"""
+    """Groq で YouTube SEO メタデータを生成（CTR+SEO最適化版）"""
     client = Groq(api_key=GROQ_API_KEY)
+
+    chapters = _generate_chapters(script)
 
     prompt = f"""あなたはYouTube SEOの専門家です。
 以下の動画について、検索・クリック率を最大化するメタデータを生成してください。
@@ -634,45 +744,114 @@ def optimize_metadata(theme: dict, script: str) -> dict:
 テーマ: {theme['theme']}
 キーワード: {', '.join(theme.get('keywords', []))}
 対象: {theme.get('audience', '日本のサラリーマン')}
+動画尺: {VIDEO_DURATION_MIN}〜{VIDEO_DURATION_MAX}分
 
-【タイトルのルール】
-- 自然な日本語の文にすること（キーワード羅列は絶対NG）
-- 視聴者が思わずクリックしたくなる表現を使う
-- 数字・疑問形・意外性のある表現を含める
+【タイトルのルール — 最重要】
+- メインキーワードを最初の40文字以内に配置すること
+- 【】で囲んだパワーワードを冒頭に入れる（例: 【衝撃】【知らないと損】【完全版】）
+- 数字を必ず含める（3つの方法、5つのステップ、87%の人が〜等）
+- 疑問形 or 断定形で書く
 - 50文字以内
-- 良い例: 「【知らないと損】月5万円の不労所得を作る3つの方法」「なぜサラリーマンの9割が投資で失敗するのか」
+- 良い例: 「【知らないと損】月5万円の不労所得を作る3つの方法」「【2026年版】なぜサラリーマンの9割が投資で失敗するのか」
 - 悪い例: 「投資 お金儲け 資産運用」「節約 貯金 方法 おすすめ」
+
+【説明文のルール — SEO重視】
+- 最初の150文字が「もっと見る」の前に表示される → ここにキーワードと価値提案を凝縮
+- 1行目: 動画の結論（何が学べるか）を1文で
+- 2行目: 対象者（「〜な方は必見です」）
+- 3行目以降: 動画の内容概要
+- 末尾にチャプターを含める
+- 合計300-500文字
 
 以下のJSON形式のみで出力してください:
 {{
-  "title": "自然な日本語タイトル（50文字以内）",
-  "description": "500文字以内の自然な説明文。動画の内容を要約し、キーワードを自然に含める",
-  "tags": ["タグ1", "タグ2", ..., "タグ15（最大）"],
+  "title": "【パワーワード】メインキーワード入りタイトル（50文字以内）",
+  "description_main": "150文字以内の要約（もっと見る前に表示される部分）",
+  "description_detail": "残りの説明文（150-300文字）",
+  "tags": ["メインKW", "関連KW1", ..., "タグ15（最大）"],
   "category": "Education"
 }}"""
 
     resp = client.chat.completions.create(
         model=GROQ_MODEL,
-        max_tokens=1024,
+        max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
     )
     raw = resp.choices[0].message.content.strip()
 
     match = re.search(r'\{.*\}', raw, re.DOTALL)
     if match:
-        metadata = json.loads(match.group())
-        # タイトルを50文字以内に制限
-        metadata["title"] = metadata.get("title", theme["theme"])[:50]
-        metadata["tags"] = metadata.get("tags", [])[:15]
-        return metadata
+        meta = json.loads(match.group())
+
+        # タイトル制限
+        title = meta.get("title", theme["theme"])[:50]
+
+        # 説明文組み立て（SEOテンプレ）
+        desc_main = meta.get("description_main", "")
+        desc_detail = meta.get("description_detail", "")
+        description = _build_description(desc_main, desc_detail, chapters, theme)
+
+        # タグ（カテゴリ別ベース + AI生成タグ）
+        base_tags = _get_category_tags(theme.get("category", "finance"))
+        ai_tags = meta.get("tags", [])[:10]
+        all_tags = list(dict.fromkeys(ai_tags + base_tags))[:15]  # 重複排除・15個上限
+
+        return {
+            "title": title,
+            "description": description,
+            "tags": all_tags,
+            "category": meta.get("category", "Education")
+        }
 
     # フォールバック
+    fallback_desc = _build_description(
+        f"{theme['theme']}について徹底解説します。",
+        f"この動画では5つのポイントに分けて、{theme.get('audience', '日本のサラリーマン')}向けに詳しく解説しています。",
+        chapters, theme
+    )
     return {
         "title": theme["theme"][:50],
-        "description": f"{theme['theme']}について解説します。\n\nキーワード: {', '.join(theme.get('keywords', []))}",
-        "tags": theme.get("keywords", []) + ["YouTube", "日本", "サラリーマン"],
+        "description": fallback_desc,
+        "tags": theme.get("keywords", []) + _get_category_tags("finance"),
         "category": "Education"
     }
+
+
+def _build_description(main: str, detail: str, chapters: str, theme: dict) -> str:
+    """YouTube説明文のテンプレート組み立て"""
+    keywords = theme.get("keywords", [])
+    kw_text = " ".join([f"#{k}" for k in keywords[:5]])
+
+    description = f"""{main}
+
+{detail}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📋 目次（チャプター）
+━━━━━━━━━━━━━━━━━━━━━━
+{chapters}
+
+━━━━━━━━━━━━━━━━━━━━━━
+{kw_text}
+
+🔔 チャンネル登録はこちら → チャンネルページから登録お願いします
+👍 高評価・コメントで応援お願いします！
+
+⚠️ この動画の一部はAI技術を活用して制作しています。
+情報の正確性には注意を払っていますが、投資判断は自己責任でお願いします。
+最新の正確な情報は公式ソースをご確認ください。"""
+
+    return description.strip()
+
+
+def _get_category_tags(category: str) -> list:
+    """カテゴリ別ベースタグ"""
+    tag_templates = {
+        "finance": ["投資", "資産運用", "節約", "お金", "サラリーマン", "不労所得", "NISA", "副業"],
+        "tech": ["AI", "テクノロジー", "最新技術", "ガジェット", "プログラミング", "IT", "ChatGPT"],
+        "business": ["ビジネス", "自己啓発", "副業", "起業", "キャリア", "スキルアップ", "転職"],
+    }
+    return tag_templates.get(category, tag_templates["finance"])
 
 
 # ============================================================
