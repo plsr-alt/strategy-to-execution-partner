@@ -1,4 +1,6 @@
-# 参謀標準手順 — 市場調査 PLAYBOOK
+# [DEPRECATED] 参謀標準手順 — 市場調査 PLAYBOOK
+# ⚠️ このファイルは `company/external_tools.md` に統合済み。
+# 今後は仮想AI企業経由で外部委譲される。参照: CLAUDE.md ルール6
 
 ## 概要
 
