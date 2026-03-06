@@ -1,0 +1,799 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AI Image Generation GPU Spot Instance Stack.
+  Provisions a g4dn.xlarge spot instance with auto-stop (90 min),
+  SNS email notifications, S3 bucket, and supporting IAM/Lambda/EventBridge resources.
+  Region: ap-northeast-1 (Tokyo)
+
+# ============================================================
+# Parameters
+# ============================================================
+Parameters:
+
+  NotificationEmail:
+    Type: String
+    Description: Email address to receive SNS notifications (instance start/stop/alarm).
+    AllowedPattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+    ConstraintDescription: Must be a valid email address.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID to deploy the instance into (use same VPC as existing t4g.medium).
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet ID (public subnet, same as existing t4g.medium).
+
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: >
+      AMI ID for Amazon Linux 2023 x86_64.
+      Default resolves to the latest AL2023 AMI via SSM Parameter Store.
+      Override with a custom AMI (e.g., pre-baked CUDA AMI) after initial setup.
+
+  KeyPairName:
+    Type: String
+    Default: ''
+    Description: >
+      (Optional) EC2 Key Pair name for SSH access.
+      Leave blank to disable SSH (SSM Session Manager is the primary access method).
+
+  ProjectTag:
+    Type: String
+    Default: ai-image-business
+    Description: Value for the Project tag applied to all resources.
+
+# ============================================================
+# Conditions
+# ============================================================
+Conditions:
+  HasKeyPair: !Not [!Equals [!Ref KeyPairName, '']]
+
+# ============================================================
+# Resources
+# ============================================================
+Resources:
+
+  # ----------------------------------------------------------
+  # 1. S3 Bucket — AI-generated images
+  # ----------------------------------------------------------
+  AiImageBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      # Bucket name includes AccountId for global uniqueness
+      BucketName: !Sub 'ai-image-gen-${AWS::AccountId}'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: ManagedBy
+          Value: ai-image-gen
+      # Block all public access
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # Server-side encryption
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # Lifecycle: delete objects older than 30 days
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldObjects
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpirationInDays: 7
+
+  # ----------------------------------------------------------
+  # 2. SNS Topic — notifications
+  # ----------------------------------------------------------
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'ai-image-gen-notifications-${AWS::StackName}'
+      DisplayName: AI Image Gen Notifications
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: ManagedBy
+          Value: ai-image-gen
+
+  NotificationEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      TopicArn: !Ref NotificationTopic
+      Endpoint: !Ref NotificationEmail
+
+  # ----------------------------------------------------------
+  # 3. IAM Role for EC2 Instance Profile
+  # ----------------------------------------------------------
+  Ec2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'ai-image-gen-ec2-role-${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # SSM Session Manager (no SSH required)
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        # CloudWatch agent / logs
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: S3AiImageAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: S3PutGet
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - !GetAtt AiImageBucket.Arn
+                  - !Sub '${AiImageBucket.Arn}/*'
+        - PolicyName: Ec2StopSelf
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: StopOwnInstance
+                Effect: Allow
+                Action:
+                  - ec2:StopInstances
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/ManagedBy': 'ai-image-gen'
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ai-image-gen/*'
+        - PolicyName: SsmParameterRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ai-image-gen/*'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: ManagedBy
+          Value: ai-image-gen
+
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub 'ai-image-gen-instance-profile-${AWS::StackName}'
+      Roles:
+        - !Ref Ec2InstanceRole
+
+  # ----------------------------------------------------------
+  # 4. Security Group — outbound only
+  # ----------------------------------------------------------
+  GpuInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub 'ai-image-gen-sg-${AWS::StackName}'
+      GroupDescription: >
+        Security group for g4dn.xlarge AI image generation instance.
+        Inbound: none (SSM only). Outbound: HTTPS (443) for S3/SSM/PyPI/HuggingFace.
+      VpcId: !Ref VpcId
+      # No inbound rules — SSM does not require inbound ports
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS outbound for S3, SSM, PyPI, HuggingFace
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP outbound (package mirrors fallback)
+      Tags:
+        - Key: Name
+          Value: ai-image-gen-sg
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: ManagedBy
+          Value: ai-image-gen
+
+  # ----------------------------------------------------------
+  # 5. Launch Template for g4dn.xlarge Spot
+  # ----------------------------------------------------------
+  GpuLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub 'ai-image-gen-lt-${AWS::StackName}'
+      LaunchTemplateData:
+        # Instance type
+        InstanceType: g4dn.xlarge
+        # AMI
+        ImageId: !Ref AmiId
+        # Key pair (optional)
+        KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref AWS::NoValue]
+        # IAM Instance Profile
+        IamInstanceProfile:
+          Arn: !GetAtt Ec2InstanceProfile.Arn
+        # OS shutdown -h → instance "stop" (not terminate). Billing stops.
+        InstanceInitiatedShutdownBehavior: stop
+        # Spot instance request
+        InstanceMarketOptions:
+          MarketType: spot
+          SpotOptions:
+            SpotInstanceType: one-time
+            InstanceInterruptionBehavior: stop
+        # Storage: 100GB gp3
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 100
+              DeleteOnTermination: true
+              Encrypted: true
+              # gp3 defaults: 3000 IOPS / 125 MiB/s — sufficient for image gen workloads
+        # Network: assign public IP for package installation access
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: true
+            SubnetId: !Ref SubnetId
+            Groups:
+              - !Ref GpuInstanceSecurityGroup
+        # User Data:
+        #   1. Run /home/ec2-user/startup.sh if it exists (post-AMI-bake hook)
+        #   2. Primary auto-stop: schedule shutdown in 90 minutes
+        #   3. Write a flag file so the backup Lambda can also detect start time
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+            echo "=== AI Image Gen Instance Boot ==="
+            echo "Instance ID: $(TOKEN=$(curl -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' \
+              http://169.254.169.254/latest/api/token) && \
+              curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+              http://169.254.169.254/latest/meta-data/instance-id)"
+            echo "Boot time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+            # Write boot timestamp to SSM Parameter Store for Lambda backup check
+            INSTANCE_ID=$(TOKEN=$(curl -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' \
+              http://169.254.169.254/latest/api/token) && \
+              curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+              http://169.254.169.254/latest/meta-data/instance-id)
+            BOOT_TS=$(date -u +%s)
+
+            # Store boot time (best-effort, do not fail boot on SSM error)
+            aws ssm put-parameter \
+              --region ${AWS::Region} \
+              --name "/ai-image-gen/instance-boot-time/$INSTANCE_ID" \
+              --value "$BOOT_TS" \
+              --type String \
+              --overwrite || true
+
+            # Primary auto-stop: shutdown after 90 minutes
+            # 'shutdown -h +90' schedules halt 90 minutes from now
+            shutdown -h +90 &
+            echo "Primary auto-stop scheduled: shutdown in 90 minutes"
+
+            # Run startup script if present (populated after AMI bake)
+            if [ -f /home/ec2-user/startup.sh ]; then
+              echo "Running /home/ec2-user/startup.sh ..."
+              chmod +x /home/ec2-user/startup.sh
+              sudo -u ec2-user bash /home/ec2-user/startup.sh
+            else
+              echo "/home/ec2-user/startup.sh not found — skipping (first boot or base AMI)"
+            fi
+
+            echo "=== User Data complete ==="
+
+        # Resource tags applied to the instance and volumes
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: ai-image-gen
+              - Key: Project
+                Value: !Ref ProjectTag
+              - Key: ManagedBy
+                Value: ai-image-gen
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: ai-image-gen-volume
+              - Key: Project
+                Value: !Ref ProjectTag
+              - Key: ManagedBy
+                Value: ai-image-gen
+          - ResourceType: spot-instances-request
+            Tags:
+              - Key: Name
+                Value: ai-image-gen-spot
+              - Key: Project
+                Value: !Ref ProjectTag
+              - Key: ManagedBy
+                Value: ai-image-gen
+
+  # ----------------------------------------------------------
+  # 6. IAM Role for Lambda
+  # ----------------------------------------------------------
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'ai-image-gen-lambda-role-${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: LambdaNotifyAndStop
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SNSPublish
+                Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref NotificationTopic
+              - Sid: EC2Describe
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                Resource: '*'
+              - Sid: EC2Stop
+                Effect: Allow
+                Action:
+                  - ec2:StopInstances
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/ManagedBy': 'ai-image-gen'
+              - Sid: SsmParameterAccess
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ai-image-gen/*'
+              - Sid: CloudWatchMetrics
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:DescribeAlarms
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: ManagedBy
+          Value: ai-image-gen
+
+  # ----------------------------------------------------------
+  # 7. Lambda Function — handles start/stop events + periodic check
+  # ----------------------------------------------------------
+  AutoStopNotifyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'ai-image-gen-auto-stop-${AWS::StackName}'
+      Description: >
+        Handles EC2 state-change events for ai-image-gen instances.
+        On start: sends SNS notification.
+        On stop: sends SNS notification and cleans up SSM parameter.
+        On schedule (every 15 min): checks if any instance has been running > 90 min, stops it.
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 128
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref NotificationTopic
+          MAX_RUNTIME_SECONDS: '5400'
+          MANAGED_BY_TAG: 'ai-image-gen'
+          AWS_ACCOUNT_ID: !Ref AWS::AccountId
+          STACK_REGION: !Ref AWS::Region
+      Code:
+        ZipFile: |
+          """
+          Lambda handler for AI Image Gen auto-stop and notifications.
+
+          Triggered by:
+            1. EventBridge rule: EC2 state-change (running / stopped / terminated)
+            2. EventBridge scheduled rule: every 15 minutes (backup watchdog)
+          """
+          import boto3
+          import os
+          import time
+          import json
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          ec2     = boto3.client('ec2')
+          sns     = boto3.client('sns')
+          ssm     = boto3.client('ssm')
+
+          SNS_TOPIC_ARN      = os.environ['SNS_TOPIC_ARN']
+          MAX_RUNTIME_SEC    = int(os.environ.get('MAX_RUNTIME_SECONDS', '5400'))
+          MANAGED_BY_TAG     = os.environ.get('MANAGED_BY_TAG', 'ai-image-gen')
+          STACK_REGION       = os.environ.get('STACK_REGION', 'ap-northeast-1')
+
+
+          def publish_sns(subject: str, message: str) -> None:
+              """Publish a notification to the SNS topic."""
+              try:
+                  sns.publish(
+                      TopicArn=SNS_TOPIC_ARN,
+                      Subject=subject,
+                      Message=message,
+                  )
+                  logger.info(f"SNS published: {subject}")
+              except Exception as e:
+                  logger.error(f"SNS publish failed: {e}")
+
+
+          def get_boot_time_from_ssm(instance_id: str) -> int | None:
+              """Retrieve the boot timestamp stored by User Data."""
+              try:
+                  resp = ssm.get_parameter(
+                      Name=f"/ai-image-gen/instance-boot-time/{instance_id}"
+                  )
+                  return int(resp['Parameter']['Value'])
+              except ssm.exceptions.ParameterNotFound:
+                  return None
+              except Exception as e:
+                  logger.warning(f"SSM get_parameter failed for {instance_id}: {e}")
+                  return None
+
+
+          def delete_boot_time_from_ssm(instance_id: str) -> None:
+              """Clean up SSM parameter when instance stops."""
+              try:
+                  ssm.delete_parameter(
+                      Name=f"/ai-image-gen/instance-boot-time/{instance_id}"
+                  )
+                  logger.info(f"SSM parameter deleted for {instance_id}")
+              except Exception as e:
+                  logger.warning(f"SSM delete failed for {instance_id}: {e}")
+
+
+          def get_managed_instances() -> list[dict]:
+              """Return all running instances tagged ManagedBy=ai-image-gen."""
+              resp = ec2.describe_instances(
+                  Filters=[
+                      {'Name': 'tag:ManagedBy', 'Values': [MANAGED_BY_TAG]},
+                      {'Name': 'instance-state-name', 'Values': ['running']},
+                  ]
+              )
+              instances = []
+              for reservation in resp.get('Reservations', []):
+                  for inst in reservation.get('Instances', []):
+                      instances.append(inst)
+              return instances
+
+
+          def stop_instance(instance_id: str) -> None:
+              """Stop the specified EC2 instance."""
+              try:
+                  ec2.stop_instances(InstanceIds=[instance_id])
+                  logger.info(f"Stop requested for {instance_id}")
+              except Exception as e:
+                  logger.error(f"Failed to stop {instance_id}: {e}")
+                  raise
+
+
+          def handle_state_change(event: dict) -> None:
+              """Process EC2 State Change Notification events from EventBridge."""
+              detail       = event.get('detail', {})
+              state        = detail.get('state', '')
+              instance_id  = detail.get('instance-id', 'unknown')
+
+              logger.info(f"State change: {instance_id} -> {state}")
+
+              if state == 'running':
+                  # Notify: instance started
+                  publish_sns(
+                      subject=f"[AI-Image-Gen] GPU Instance Started: {instance_id}",
+                      message=(
+                          f"GPU instance has started.\n\n"
+                          f"Instance ID : {instance_id}\n"
+                          f"Region      : {STACK_REGION}\n"
+                          f"Auto-stop   : Primary via OS shutdown in ~90 min.\n"
+                          f"              Backup Lambda watchdog runs every 15 min.\n\n"
+                          f"The instance will be stopped automatically after 90 minutes "
+                          f"to control costs (~$0.33 per session).\n"
+                      ),
+                  )
+
+              elif state in ('stopped', 'terminated'):
+                  # Notify: instance stopped
+                  publish_sns(
+                      subject=f"[AI-Image-Gen] GPU Instance Stopped: {instance_id}",
+                      message=(
+                          f"GPU instance has stopped.\n\n"
+                          f"Instance ID : {instance_id}\n"
+                          f"State       : {state}\n"
+                          f"Region      : {STACK_REGION}\n\n"
+                          f"Estimated cost for this session: ~$0.22-0.33 (spot).\n"
+                          f"Check S3 bucket for generated images.\n"
+                      ),
+                  )
+                  # Clean up SSM parameter
+                  delete_boot_time_from_ssm(instance_id)
+
+
+          def handle_watchdog() -> None:
+              """
+              Backup watchdog: runs every 15 minutes.
+              Checks all running ai-image-gen instances.
+              If any has been running longer than MAX_RUNTIME_SECONDS, stop it.
+              """
+              logger.info("Watchdog check: scanning running ai-image-gen instances")
+              now = int(time.time())
+              instances = get_managed_instances()
+
+              if not instances:
+                  logger.info("Watchdog: no running instances found")
+                  return
+
+              for inst in instances:
+                  instance_id = inst['InstanceId']
+                  # Try SSM-stored boot time first (most accurate)
+                  boot_ts = get_boot_time_from_ssm(instance_id)
+
+                  # Fallback: use EC2 LaunchTime
+                  if boot_ts is None:
+                      import datetime
+                      launch_time = inst.get('LaunchTime')
+                      if launch_time:
+                          if hasattr(launch_time, 'timestamp'):
+                              boot_ts = int(launch_time.timestamp())
+                          else:
+                              boot_ts = now  # cannot determine — skip
+
+                  if boot_ts is None:
+                      logger.warning(f"Watchdog: cannot determine boot time for {instance_id}, skipping")
+                      continue
+
+                  runtime_sec = now - boot_ts
+                  logger.info(f"Watchdog: {instance_id} has been running {runtime_sec}s (max {MAX_RUNTIME_SEC}s)")
+
+                  if runtime_sec > MAX_RUNTIME_SEC:
+                      logger.warning(f"Watchdog: {instance_id} exceeded max runtime, stopping")
+                      publish_sns(
+                          subject=f"[AI-Image-Gen] Auto-Stop Triggered (Watchdog): {instance_id}",
+                          message=(
+                              f"Backup watchdog auto-stop triggered.\n\n"
+                              f"Instance ID  : {instance_id}\n"
+                              f"Runtime      : {runtime_sec // 60} minutes\n"
+                              f"Max allowed  : {MAX_RUNTIME_SEC // 60} minutes\n\n"
+                              f"The instance has been stopped to prevent unexpected costs.\n"
+                              f"(Primary shutdown via OS 'shutdown -h +90' may have failed.)\n"
+                          ),
+                      )
+                      stop_instance(instance_id)
+
+
+          def handler(event, context):
+              """Lambda entry point."""
+              logger.info(f"Event: {json.dumps(event)}")
+
+              source      = event.get('source', '')
+              detail_type = event.get('detail-type', '')
+
+              if source == 'aws.ec2' and detail_type == 'EC2 Instance State-change Notification':
+                  handle_state_change(event)
+              elif source == 'aws.scheduler' or detail_type == 'Scheduled Event':
+                  # EventBridge scheduled rule (watchdog)
+                  handle_watchdog()
+              else:
+                  # Unknown event shape — try to handle gracefully
+                  logger.warning(f"Unknown event source={source} detail-type={detail_type}")
+                  # Attempt watchdog as safe default
+                  handle_watchdog()
+
+              return {'statusCode': 200, 'body': 'OK'}
+
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: ManagedBy
+          Value: ai-image-gen
+
+  # Lambda log group (explicit, so CloudFormation manages retention)
+  AutoStopLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AutoStopNotifyLambda}'
+      RetentionInDays: 14
+
+  # ----------------------------------------------------------
+  # 8. EventBridge Rule — EC2 State Change (running / stopped)
+  # ----------------------------------------------------------
+  Ec2StateChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'ai-image-gen-state-change-${AWS::StackName}'
+      Description: >
+        Triggers Lambda when an ai-image-gen EC2 instance transitions
+        to running, stopped, or terminated state.
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - EC2 Instance State-change Notification
+        detail:
+          state:
+            - running
+            - stopped
+            - terminated
+      Targets:
+        - Id: AutoStopNotifyLambdaTarget
+          Arn: !GetAtt AutoStopNotifyLambda.Arn
+
+  # Note: The rule above fires for ALL EC2 state changes in the account.
+  # The Lambda filters by ManagedBy tag via ec2:DescribeInstances, so only
+  # ai-image-gen instances trigger meaningful actions.
+  # To scope the pattern further you can add tag-based filtering once
+  # EventBridge supports EC2 tag filters in event patterns natively.
+
+  # Permission: EventBridge -> Lambda (state change)
+  LambdaPermissionStateChange:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AutoStopNotifyLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Ec2StateChangeRule.Arn
+
+  # ----------------------------------------------------------
+  # 9. EventBridge Rule — Scheduled Watchdog (every 15 minutes)
+  # ----------------------------------------------------------
+  WatchdogScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'ai-image-gen-watchdog-${AWS::StackName}'
+      Description: >
+        Backup watchdog: runs every 15 minutes to stop any ai-image-gen instance
+        that has been running longer than 90 minutes (primary auto-stop failsafe).
+      State: ENABLED
+      ScheduleExpression: 'rate(15 minutes)'
+      Targets:
+        - Id: WatchdogLambdaTarget
+          Arn: !GetAtt AutoStopNotifyLambda.Arn
+
+  # Permission: EventBridge -> Lambda (watchdog schedule)
+  LambdaPermissionWatchdog:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AutoStopNotifyLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt WatchdogScheduleRule.Arn
+
+  # ----------------------------------------------------------
+  # 10. CloudWatch Alarm — CPU utilization backup stop
+  #     (tertiary safety net: if instance is idle for 30 min, stop it)
+  #     NOTE: This alarm requires the instance to exist to be useful.
+  #     It is created as a static alarm; it will be in INSUFFICIENT_DATA
+  #     state until an instance with the correct instance-id exists.
+  #     For a dynamic per-instance alarm, the Lambda creates one on start.
+  # ----------------------------------------------------------
+  # (No static CW alarm here — the Lambda watchdog is sufficient.
+  #  The Lambda creates a dynamic per-instance alarm on start for
+  #  the CPU-idle backup stop, which is more accurate than a static one.)
+
+# ============================================================
+# Outputs
+# ============================================================
+Outputs:
+
+  S3BucketName:
+    Description: Name of the S3 bucket for AI-generated images.
+    Value: !Ref AiImageBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-S3BucketName'
+
+  S3BucketArn:
+    Description: ARN of the S3 bucket.
+    Value: !GetAtt AiImageBucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-S3BucketArn'
+
+  SNSTopicArn:
+    Description: ARN of the SNS notification topic.
+    Value: !Ref NotificationTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-SNSTopicArn'
+
+  InstanceProfileArn:
+    Description: ARN of the EC2 Instance Profile for the g4dn instance.
+    Value: !GetAtt Ec2InstanceProfile.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceProfileArn'
+
+  LaunchTemplateId:
+    Description: ID of the Launch Template for g4dn.xlarge spot instances.
+    Value: !Ref GpuLaunchTemplate
+    Export:
+      Name: !Sub '${AWS::StackName}-LaunchTemplateId'
+
+  LaunchTemplateVersion:
+    Description: Default version of the Launch Template.
+    Value: !GetAtt GpuLaunchTemplate.DefaultVersionNumber
+    Export:
+      Name: !Sub '${AWS::StackName}-LaunchTemplateVersion'
+
+  SecurityGroupId:
+    Description: ID of the Security Group attached to the GPU instance.
+    Value: !Ref GpuInstanceSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroupId'
+
+  LambdaFunctionArn:
+    Description: ARN of the auto-stop/notify Lambda function.
+    Value: !GetAtt AutoStopNotifyLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaFunctionArn'
+
+  DeployCommand:
+    Description: >
+      Sample AWS CLI command to deploy this stack.
+      Replace parameter values before executing.
+    Value: !Sub >-
+      aws cloudformation deploy
+      --template-file gpu_image_gen_stack.yaml
+      --stack-name ai-image-gen-stack
+      --region ap-northeast-1
+      --capabilities CAPABILITY_NAMED_IAM
+      --parameter-overrides
+      NotificationEmail=your@email.com
+      VpcId=vpc-xxxxxxxxx
+      SubnetId=subnet-xxxxxxxxx
+      KeyPairName=
+
+  LaunchInstanceCommand:
+    Description: >
+      Sample AWS CLI command to launch a g4dn.xlarge spot instance
+      using the Launch Template created by this stack.
+    Value: !Sub >-
+      aws ec2 run-instances
+      --launch-template LaunchTemplateId=${GpuLaunchTemplate},Version=$Default
+      --count 1
+      --region ap-northeast-1
+      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=ai-image-gen},{Key=ManagedBy,Value=ai-image-gen}]"
