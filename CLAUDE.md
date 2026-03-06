@@ -35,14 +35,33 @@
 | 記事にして/投稿作って | `content_backlog.md`登録→`05_CONTENT/`に下書き |
 | 納品物確認/提出前レビュー | Section 8 の監査フロー実行 |
 
-## 6. 分業ルール（トークン最適化）
-| 担当 | 作業内容 |
-|------|---------|
-| **Claude Code** | 検討・判定・レビュー・軽い調査・ファイル管理・DAILY更新 |
-| **WSL+Groq** | 長文生成・市場調査（CrewAI）・コード実装・重い処理 |
+## 6. 分業ルール（仮想AI企業ベース）
 
-**原則**: Claude Codeは「考える・判断する・指示を出す」に集中。実行が重い作業はWSL+Groqに委譲。
-手順→`.claude/PLAYBOOK.md` 参照。
+すべてのタスクは **仮想AI企業** を通して実行する。
+
+| 階層 | モデル | 責務 |
+|------|--------|------|
+| **Claude Code（私）** | — | 日常判定・DAILY更新・ファイル管理・軽い修正。仮想AI企業への依頼判断 |
+| **CEO** | opus | ルーティング・complexity判定・execution_mode判定・品質ゲート |
+| **部長5名** | sonnet | WBS分解・外部委譲判定・統合 |
+| **社員6名** | haiku | 内部実作業（調査・構造化・執筆・レビュー・編集） |
+| **外部LLM** | CrewAI/Groq/Ollama | 重い処理（大規模調査・長文生成・コード実装） |
+
+### execution_mode（CEOが判定）
+| モード | 条件 | 例 |
+|--------|------|---|
+| **internal** | 内部ワーカーだけで完結 | 短い調査、テンプレ埋め、レビュー |
+| **external** | 外部LLMに全面委譲 | 大規模市場調査、大量コンテンツ生成 |
+| **hybrid** | 一部外部 + 残り内部 | 調査はCrewAI → 編集は内部 |
+
+### コマンド
+| コマンド | 用途 |
+|---------|------|
+| `/work <依頼>` | フルフロー（CEO→部長→社員/外部→レビュー） |
+| `/sales`, `/content`, `/backoffice`, `/strategy`, `/dev` | 部門直接（CEO省略） |
+| `/dna <修正>` | 会社DNA更新 |
+
+**詳細**: `README_AI_COMPANY.md` / `company/external_tools.md`
 
 ## 7. 外部連携
 優先順: Google Calendar → GitHub Issues → Google Sheets → Notion

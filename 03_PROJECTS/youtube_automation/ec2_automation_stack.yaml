@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'YouTube Automation EC2 Instance Auto Start/Stop Schedule (CloudFormation)'
+
+Parameters:
+  InstanceId:
+    Type: String
+    Default: i-02ae03f0b54d46ac1
+    Description: EC2 Instance ID to manage
+
+  AWS Region:
+    Type: String
+    Default: ap-northeast-1
+    Description: AWS Region
+
+Resources:
+  # ============================================
+  # IAM Role for Lambda
+  # ============================================
+  LambdaEC2ControlRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: youtube-automation-lambda-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: EC2ControlPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                  - ec2:DescribeInstances
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: ap-northeast-1
+
+  # ============================================
+  # Lambda Function
+  # ============================================
+  EC2ControlLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: youtube-automation-ec2-control
+      Runtime: python3.11
+      Role: !GetAtt LambdaEC2ControlRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          INSTANCE_ID: !Ref InstanceId
+          REGION: ap-northeast-1
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import os
+          from datetime import datetime
+
+          ec2 = boto3.client('ec2', region_name=os.getenv('REGION', 'ap-northeast-1'))
+
+          def lambda_handler(event, context):
+              """
+              EC2 Instance Start/Stop Controller
+
+              Expected event payload:
+              {
+                  "action": "start" or "stop"
+              }
+              """
+
+              instance_id = os.getenv('INSTANCE_ID')
+              action = event.get('action', 'unknown')
+
+              try:
+                  if action == 'start':
+                      response = ec2.start_instances(InstanceIds=[instance_id])
+                      message = f"✅ Started instance {instance_id}"
+                      status = 'success'
+
+                  elif action == 'stop':
+                      response = ec2.stop_instances(InstanceIds=[instance_id])
+                      message = f"⏹️ Stopped instance {instance_id}"
+                      status = 'success'
+
+                  else:
+                      message = f"❌ Unknown action: {action}"
+                      status = 'error'
+
+                  # Log to CloudWatch
+                  log_entry = {
+                      "timestamp": datetime.now().isoformat(),
+                      "action": action,
+                      "instance_id": instance_id,
+                      "status": status,
+                      "message": message
+                  }
+
+                  print(json.dumps(log_entry, ensure_ascii=False))
+
+                  return {
+                      "statusCode": 200 if status == 'success' else 400,
+                      "body": json.dumps(log_entry)
+                  }
+
+              except Exception as e:
+                  error_log = {
+                      "timestamp": datetime.now().isoformat(),
+                      "action": action,
+                      "instance_id": instance_id,
+                      "status": "error",
+                      "error": str(e)
+                  }
+
+                  print(json.dumps(error_log, ensure_ascii=False))
+
+                  return {
+                      "statusCode": 500,
+                      "body": json.dumps(error_log)
+                  }
+
+  # ============================================
+  # EventBridge Role (to invoke Lambda)
+  # ============================================
+  EventBridgeInvokeLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: youtube-automation-eventbridge-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt EC2ControlLambda.Arn
+
+  # ============================================
+  # Lambda Permission (EventBridge → Lambda)
+  # ============================================
+  LambdaInvokePermissionStart:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EC2ControlLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt StartInstanceRule.Arn
+
+  LambdaInvokePermissionStop:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EC2ControlLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt StopInstanceRule.Arn
+
+  # ============================================
+  # EventBridge Rules
+  # ============================================
+
+  # Rule 1: START at 06:00 JST (21:00 UTC)
+  StartInstanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: youtube-automation-start-6am-jst
+      Description: Start EC2 instance at 06:00 JST every day
+      ScheduleExpression: 'cron(0 21 * * ? *)'  # UTC time (21:00 UTC = 06:00 JST+9)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt EC2ControlLambda.Arn
+          RoleArn: !GetAtt EventBridgeInvokeLambdaRole.Arn
+          Input: '{"action": "start"}'
+
+  # Rule 2: STOP at 23:00 JST (14:00 UTC)
+  StopInstanceRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: youtube-automation-stop-11pm-jst
+      Description: Stop EC2 instance at 23:00 JST every day
+      ScheduleExpression: 'cron(0 14 * * ? *)'  # UTC time (14:00 UTC = 23:00 JST+9)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt EC2ControlLambda.Arn
+          RoleArn: !GetAtt EventBridgeInvokeLambdaRole.Arn
+          Input: '{"action": "stop"}'
+
+Outputs:
+  LambdaFunctionName:
+    Description: Lambda Function Name
+    Value: !Ref EC2ControlLambda
+    Export:
+      Name: youtube-automation-lambda-function-name
+
+  LambdaFunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt EC2ControlLambda.Arn
+    Export:
+      Name: youtube-automation-lambda-function-arn
+
+  StartRuleName:
+    Description: EventBridge Rule for Starting Instance
+    Value: !Ref StartInstanceRule
+    Export:
+      Name: youtube-automation-start-rule
+
+  StopRuleName:
+    Description: EventBridge Rule for Stopping Instance
+    Value: !Ref StopInstanceRule
+    Export:
+      Name: youtube-automation-stop-rule
+
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref InstanceId
+    Export:
+      Name: youtube-automation-instance-id
+
+  CloudWatchLogsGroup:
+    Description: CloudWatch Logs Group for Lambda
+    Value: !Sub '/aws/lambda/${EC2ControlLambda}'
+    Export:
+      Name: youtube-automation-logs-group
