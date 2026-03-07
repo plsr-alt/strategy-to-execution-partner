@@ -1,7 +1,7 @@
 # マルチチャネル自動展開システム — TODO
 
 > 初版: 2026-03-07
-> 目標: YouTube 月産15本 → 4SNS × 月産60本 投稿へ拡張
+> 目標: YouTube 月産15本 → Instagram/Pinterest 自動 + X 手動 で月産45本+投稿へ拡張（コスト: ¥0/月）
 
 ---
 
@@ -9,7 +9,7 @@
 
 - [ ] **PLAN.md / SPEC.md / TODO.md レビュー**（30分）
   - [ ] 依存関係の確認
-  - [ ] 技術選択（Ayrshare vs 個別API）の最終確定
+  - [x] 技術選択 → **直接API（Instagram Graph API + Pinterest API）に確定**（Ayrshare $29/月を排除、X API有料化のため手動投稿に切替）
   - [ ] 承認 → フェーズ開始
 
 ---
@@ -18,19 +18,24 @@
 
 > **ゴール**: 全API キー取得・テストアカウント準備完了
 
-### 0.1 Ayrshare API 申請・セットアップ
+### 0.1 SNS 直接API セットアップ
 
-- [ ] **Ayrshare 登録** (30分)
-  - URL: https://ayrshare.com/
-  - プラン: Business ($29/月)
-  - [ ] API Key 取得
-  - [ ] `.env` に保存
+- [ ] **Instagram Graph API セットアップ** (1時間)
+  - [ ] Facebook Developer ポータルでアプリ作成
+  - [ ] Instagram ビジネスアカウントと Facebook ページ連携
+  - [ ] Graph API トークン取得（長期トークン推奨）
+  - [ ] `.env` に `INSTAGRAM_GRAPH_API_TOKEN` / `INSTAGRAM_BUSINESS_ACCOUNT_ID` 保存
 
-- [ ] **Ayrshare 接続テスト** (2時間)
-  - [ ] 簡単な投稿テスト（テキストのみ）
-  - [ ] メディアURL テスト（画像）
-  - [ ] スケジューリング機能テスト
-  - [ ] エラーレスポンス確認
+- [ ] **Pinterest API セットアップ** (1時間)
+  - [ ] Pinterest Developer ポータルでアプリ登録
+  - [ ] ビジネスアカウント連携
+  - [ ] API キー取得
+  - [ ] `.env` に `PINTEREST_API_KEY` 保存
+
+- [ ] **直接API接続テスト** (2時間)
+  - [ ] Instagram Graph API: テスト画像投稿
+  - [ ] Pinterest API: テストピン作成
+  - [ ] エラーレスポンス確認（認証エラー・レート制限等）
 
 ### 0.2 SNS アカウント準備
 
@@ -39,8 +44,8 @@
   - [ ] テストアカウントの作成（本投稿前の検証用）
 
 - [ ] **X（Twitter）Developer Account**
-  - [ ] API v2 Access 取得（既存か再申請）
-  - [ ] Elevated アクセス確認（メディア投稿対応）
+  - ⚠️ X API は2026年2月7日から完全有料化（$0.005-0.01/リクエスト）。自動投稿は手動 or IFTTT連携に切替
+  - [ ] 手動投稿用テンプレート準備（コンテンツ変換エンジンでテキスト生成 → コピペ運用）
 
 - [ ] **Pinterest Business Account**
   - [ ] API キー取得
@@ -54,16 +59,15 @@
 
 - [ ] **Python パッケージ導入** (1時間)
   ```bash
-  pip install aiohttp python-dotenv pillow apscheduler
+  pip install httpx python-dotenv pillow apscheduler
   pip install groq  # 既存
   ```
 
 - [ ] **`.env` テンプレート作成** (30分)
   ```
-  AYRSHARE_API_KEY=xxx
   GROQ_API_KEY=xxx（既存）
+  INSTAGRAM_GRAPH_API_TOKEN=xxx
   INSTAGRAM_BUSINESS_ACCOUNT_ID=xxx
-  X_API_KEY=xxx
   PINTEREST_API_KEY=xxx
   ```
 
@@ -83,9 +87,9 @@
   - [ ] Pinterest API ピン仕様
   - [ ] KNOWLEDGE.md に記録
 
-- [ ] **Ayrshare 統合ガイド学習** (2時間)
-  - [ ] 複数プラットフォーム同時投稿の仕様
-  - [ ] スケジューリング精度（時刻誤差）
+- [ ] **直接API統合ガイド学習** (2時間)
+  - [ ] Instagram Graph API: メディアコンテナ → 公開の2ステップフロー
+  - [ ] Pinterest API v5: ピン作成・ボード管理
   - [ ] エラーハンドリングベストプラクティス
 
 ---
@@ -117,17 +121,22 @@
     - [ ] 各メソッドが正常な JSON 出力を返すか
     - [ ] 画像リサイズが正確か（アスペクト比）
 
-### 1.2 Ayrshare API 統合
+### 1.2 SNS 直接API統合
 
-- [ ] **AyrshareClient 実装** (6時間)
-  - [ ] 認証・基本 POST メソッド (1時間)
-  - [ ] マルチプラットフォーム投稿対応 (1.5時間)
-  - [ ] スケジューリング機能 (1.5時間)
-  - [ ] レスポンス解析・ログ保存 (1.5時間)
-  - [ ] ユニットテスト・モック API テスト (1時間)
+- [ ] **InstagramClient 実装** (4時間)
+  - [ ] Graph API 認証・トークン管理 (1時間)
+  - [ ] メディアコンテナ作成 → 公開の2ステップ投稿 (1.5時間)
+  - [ ] レスポンス解析・ログ保存 (1時間)
+  - [ ] ユニットテスト・モック API テスト (0.5時間)
 
-- [ ] **AyrshareRetryHandler 実装** (3時間)
-  - [ ] 指数バックオフリトライ（3回）
+- [ ] **PinterestClient 実装** (3時間)
+  - [ ] Pinterest API v5 認証 (0.5時間)
+  - [ ] ピン作成・ボード指定 (1.5時間)
+  - [ ] レスポンス解析・ログ保存 (0.5時間)
+  - [ ] ユニットテスト・モック API テスト (0.5時間)
+
+- [ ] **SNSRetryHandler 実装** (2時間)
+  - [ ] 指数バックオフリトライ（3回）— Instagram / Pinterest 共通
   - [ ] エラー分類（5XX / 4XX / ネットワーク）
   - [ ] ログ記録・アラート準備
 
@@ -152,18 +161,18 @@
 
 ### 1.5 統合テスト（テスト投稿3本）
 
-- [ ] **テスト投稿 1本目: Ayrshare テスト** (2時間)
-  - [ ] テキストのみ（メディアなし）→ Instagram / X / Pinterest
-  - [ ] 各プラットフォームで正常投稿されたか確認
-  - [ ] Ayrshare ダッシュボードでログ確認
+- [ ] **テスト投稿 1本目: 直接API テスト** (2時間)
+  - [ ] Instagram Graph API: テスト画像投稿 → 正常公開確認
+  - [ ] Pinterest API: テストピン作成 → 正常公開確認
+  - [ ] 投稿ログで各プラットフォームのレスポンス確認
 
 - [ ] **テスト投稿 2本目: メディア統合** (2時間)
-  - [ ] サムネイル画像を含めた投稿
+  - [ ] サムネイル画像を含めた投稿（Instagram + Pinterest）
   - [ ] 画像リサイズが正確か（各プラットフォーム表示確認）
   - [ ] 互換性エラーがないか
 
 - [ ] **テスト投稿 3本目: スケジューリング** (2時間)
-  - [ ] 時差投稿の動作確認（T+0 → T+2 → T+24）
+  - [ ] 時差投稿の動作確認（Instagram T+2 → Pinterest T+24）
   - [ ] スケジューラーが正確に動作したか
   - [ ] ログ・レポート生成確認
 
@@ -176,8 +185,9 @@
 ### 2.1 効果測定・分析環境構築
 
 - [ ] **SNS 分析ダッシュボード構築** (4時間)
-  - [ ] 各 SNS の投稿パフォーマンス取得 API
-  - [ ] Instagram Insights / X Analytics / Pinterest Analytics
+  - [ ] 各 SNS の投稿パフォーマンス取得（直接API経由）
+  - [ ] Instagram Insights API / Pinterest Analytics API
+  - [ ] X は手動確認（API有料化のため）
   - [ ] 週次レポート自動生成（CSV）
 
 - [ ] **YouTube 訪問流入トラッキング** (2時間)
@@ -214,7 +224,7 @@
 
 - [ ] **アラート通知機能** (2時間)
   - [ ] 投稿失敗時の Slack / メール通知
-  - [ ] 月額コスト超過時の警告
+  - [ ] API レート制限超過時の警告
 
 ---
 
@@ -278,7 +288,8 @@
 ### KNOWLEDGE.md への記録（随時）
 
 - [ ] **API 統合時のハマりポイント**
-  - Ayrshare メディアURL形式
+  - Instagram Graph API: メディアコンテナ → 公開の2ステップ
+  - Pinterest API: ボードID指定・画像URL形式
   - 各 SNS の文字制限・エスケープ処理
   - スケジューリング時刻の UTC/JST 変換
 
@@ -302,7 +313,7 @@
 
 | 指標 | 目標 | 測定方法 |
 |------|------|--------|
-| **月産投稿数** | 月60本（YouTube 15本 × 4SNS） | Ayrshare ダッシュボード |
+| **月産投稿数** | 月45本（YouTube 15本 × Instagram/Pinterest 自動 + X 手動） | 投稿ログ集計 |
 | **SNS訪問流入** | 月+500-1000回 | Google Analytics UTM |
 | **YouTube登録者増** | 月+50 | YouTube Analytics |
 | **エンゲージメント平均** | Instagram 50いいね / X 30RT / Pinterest 20保存 | SNS Analytics API |
@@ -362,13 +373,15 @@ Month 2+（4月以降）: Phase 3 ✓ 本格自動運用・スケーリング
 ├── KNOWLEDGE.md（ハマりポイント・学習記録）
 ├── src/
 │   ├── content_transformer.py（Groq × Pillow でコンテンツ生成）
-│   ├── ayrshare_client.py（Ayrshare API ラッパー）
+│   ├── instagram_client.py（Instagram Graph API クライアント）
+│   ├── pinterest_client.py（Pinterest API クライアント）
 │   ├── sns_scheduler.py（投稿スケジューラー）
 │   ├── youtube_trigger.py（YouTube トリガー検知）
 │   └── main.py（メインパイプライン）
 ├── tests/
 │   ├── test_transformer.py
-│   ├── test_ayrshare.py
+│   ├── test_instagram_client.py
+│   ├── test_pinterest_client.py
 │   └── test_scheduler.py
 ├── logs/
 │   ├── sns_posting/
