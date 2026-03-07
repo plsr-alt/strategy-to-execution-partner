@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   AI Image Generation GPU Spot Instance Stack.
-  Provisions a g4dn.xlarge spot instance with auto-stop (90 min),
+  Provisions a g6.xlarge (NVIDIA L4 24GB VRAM) spot instance with auto-stop (90 min),
   SNS email notifications, S3 bucket, and supporting IAM/Lambda/EventBridge resources.
   Region: ap-northeast-1 (Tokyo)
 
@@ -201,7 +201,7 @@ Resources:
     Properties:
       GroupName: !Sub 'ai-image-gen-sg-${AWS::StackName}'
       GroupDescription: >
-        Security group for g4dn.xlarge AI image generation instance.
+        Security group for g6.xlarge (NVIDIA L4 24GB VRAM) AI image generation instance.
         Inbound: none (SSM only). Outbound: HTTPS (443) for S3/SSM/PyPI/HuggingFace.
       VpcId: !Ref VpcId
       # No inbound rules — SSM does not require inbound ports
@@ -225,7 +225,7 @@ Resources:
           Value: ai-image-gen
 
   # ----------------------------------------------------------
-  # 5. Launch Template for g4dn.xlarge Spot
+  # 5. Launch Template for g6.xlarge Spot (NVIDIA L4 24GB VRAM)
   # ----------------------------------------------------------
   GpuLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -233,7 +233,7 @@ Resources:
       LaunchTemplateName: !Sub 'ai-image-gen-lt-${AWS::StackName}'
       LaunchTemplateData:
         # Instance type
-        InstanceType: g4dn.xlarge
+        InstanceType: g6.xlarge
         # AMI
         ImageId: !Ref AmiId
         # Key pair (optional)
@@ -249,12 +249,12 @@ Resources:
           SpotOptions:
             SpotInstanceType: one-time
             InstanceInterruptionBehavior: stop
-        # Storage: 100GB gp3
+        # Storage: 150GB gp3 (FLUX.2 klein 4B + Wan 2.2 + Z-Image-Turbo need more space)
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
             Ebs:
               VolumeType: gp3
-              VolumeSize: 100
+              VolumeSize: 150
               DeleteOnTermination: true
               Encrypted: true
               # gp3 defaults: 3000 IOPS / 125 MiB/s — sufficient for image gen workloads
@@ -742,13 +742,13 @@ Outputs:
       Name: !Sub '${AWS::StackName}-SNSTopicArn'
 
   InstanceProfileArn:
-    Description: ARN of the EC2 Instance Profile for the g4dn instance.
+    Description: ARN of the EC2 Instance Profile for the g6 instance.
     Value: !GetAtt Ec2InstanceProfile.Arn
     Export:
       Name: !Sub '${AWS::StackName}-InstanceProfileArn'
 
   LaunchTemplateId:
-    Description: ID of the Launch Template for g4dn.xlarge spot instances.
+    Description: ID of the Launch Template for g6.xlarge spot instances.
     Value: !Ref GpuLaunchTemplate
     Export:
       Name: !Sub '${AWS::StackName}-LaunchTemplateId'
@@ -789,7 +789,7 @@ Outputs:
 
   LaunchInstanceCommand:
     Description: >
-      Sample AWS CLI command to launch a g4dn.xlarge spot instance
+      Sample AWS CLI command to launch a g6.xlarge spot instance
       using the Launch Template created by this stack.
     Value: !Sub >-
       aws ec2 run-instances

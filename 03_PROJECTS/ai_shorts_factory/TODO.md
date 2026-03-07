@@ -38,63 +38,79 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 
 ### タスク一覧
 
-#### P0-1: fal.ai アカウント準備 [優先度: 🔴]
-- [ ] **登録**: https://fal.ai → Sign Up (GitHub OR Email)
-- [ ] **支払い方法**: Stripe クレジットカード登録
-- [ ] **API Key取得**: Dashboard → API Key をコピー
-- [ ] **テスト実行**: Python + `falai` ライブラリで画像1枚生成テスト
+#### P0-1: FLUX.2 [klein] 4B ローカルセットアップ [優先度: 🔴]
+- [ ] **ComfyUI インストール**:
   ```bash
-  pip install fal-ai
-  python -c "
-  import fal
-  fal.api_key = 'YOUR_KEY'
-  result = fal.run('fal-ai/flux.2', {'prompt': 'Test: Cat'})
-  print(result['images'][0]['url'])
-  "
+  git clone https://github.com/comfyanonymous/ComfyUI.git
+  cd ComfyUI
+  pip install -r requirements.txt
   ```
-- [ ] **確認**: 画像 URL が返却されることを確認
+- [ ] **FLUX.2 [klein] モデルダウンロード**:
+  - [ ] モデル (4B パラメータ, Apache 2.0) を `models/` に配置
+  - [ ] fp16 / fp8 量子化版を選択 (VRAM 6-12GB に応じて)
+- [ ] **テスト実行**: ComfyUI API 経由で画像1枚生成テスト
+  ```bash
+  # ComfyUI サーバー起動
+  python main.py --listen
+  # API経由でテスト生成
+  curl -X POST http://localhost:8188/prompt \
+    -H "Content-Type: application/json" \
+    -d '{"prompt": {"1": {"class_type": "KSampler", ...}}}'
+  ```
+- [ ] **確認**: 1024x1024 PNG が生成されることを確認 (約0.5秒/枚)
+- [ ] **フォールバック確認**: Bing Image Creator でのテスト生成
 - **期限**: 2026-03-07 (今日)
-- **見積時間**: 15分
+- **見積時間**: 30分
 - **担当**: Claude Code
-- **ブロッカー**: なし
+- **ブロッカー**: VRAM 6GB以上の GPU 必須
 
-#### P0-2: Pika API アカウント準備 [優先度: 🔴]
-- [ ] **登録**: https://pika.art → Sign Up
-- [ ] **プラン選択**: "Creator" ($8/月)
-- [ ] **支払い**: Stripe カード登録
-- [ ] **API Key取得**: Dashboard → API section
-- [ ] **テスト実行**: サンプル画像でテスト動画1本生成
+#### P0-2: Ken Burns + FFmpeg / Wan 2.1 セットアップ [優先度: 🔴]
+- [ ] **FFmpeg インストール確認**:
   ```bash
-  curl -X POST https://api.pika.art/v1/generations \
-    -H "Authorization: Bearer YOUR_API_KEY" \
-    -F "image=@sample.png" \
-    -F "prompt=smooth motion"
+  ffmpeg -version  # 既存確認
+  # 未インストールの場合
+  sudo apt install ffmpeg  # Linux
+  # or brew install ffmpeg  # Mac
   ```
+- [ ] **Ken Burns テスト実行**: サンプル画像でテスト動画1本生成
+  ```bash
+  ffmpeg -loop 1 -i sample.png \
+    -vf "zoompan=z='min(zoom+0.001,1.5)':d=150:s=1080x1920" \
+    -t 5 -c:v libx264 -pix_fmt yuv420p test_output.mp4
+  ```
+- [ ] **Wan 2.1 セットアップ** (高品質が必要な場合):
+  - [ ] Wan 2.1 1.3B モデルダウンロード (Alibaba OSS)
+  - [ ] 8GB VRAM 以上確認
+  - [ ] テスト実行: 画像→動画変換
+- [ ] **AnimateDiff (フォールバック)**:
+  - [ ] ComfyUI 用 AnimateDiff ノードインストール
 - [ ] **ダウンロード確認**: MP4 が正常に再生できるか確認
 - **期限**: 2026-03-07
-- **見積時間**: 15分
+- **見積時間**: 20分
 - **担当**: Claude Code
 - **ブロッカー**: なし
 
-#### P0-3: Ayrshare アカウント＆認証準備 [優先度: 🔴]
-- [ ] **登録**: https://app.ayrshare.com → Sign Up
-- [ ] **プラン**: Basic ($29/月)
-- [ ] **YouTube 連携**:
-  - [ ] Google Account で OAuth 認可
-  - [ ] YouTube チャンネル選択
+#### P0-3: SNS API 直接連携セットアップ (Instagram Graph API + Pinterest API) [優先度: 🔴]
+- [ ] **YouTube Data API** (既存利用):
+  - [ ] OAuth 2.0 認証確認 (既存)
   - [ ] スコープ確認: `youtube.upload`, `youtube.channel:read`
-- [ ] **Instagram 連携**:
+  - [ ] テスト: 動画アップロード API テスト
+- [ ] **Instagram Graph API 連携**:
   - [ ] Meta Business Account (既存利用)
   - [ ] Instagram ビジネスアカウント確認
-  - [ ] Graph API Token 発行
-- [ ] **TikTok 連携**:
-  - [ ] TikTok Business Account 作成 (または既存)
-  - [ ] TikTok API Access 申請
+  - [ ] Facebook App 作成 / 既存確認
+  - [ ] Graph API Token 発行 (長期トークン)
+  - [ ] テスト: Reels 投稿テスト
+- [ ] **Pinterest API 連携**:
+  - [ ] Pinterest Business Account 作成 (または既存)
+  - [ ] Pinterest Developer App 作成
   - [ ] OAuth Token 設定
-- [ ] **テスト投稿**: テスト動画1本を3PF同時投稿
-- [ ] **確認**: Dashboard で各PF の post status を確認
+  - [ ] テスト: ピン投稿テスト
+- [ ] **注意**: X API は2026年2月7日から完全有料化のため除外
+- [ ] **テスト投稿**: テスト動画を各PF個別投稿
+- [ ] **確認**: 各PFで投稿成功を確認
 - **期限**: 2026-03-08
-- **見積時間**: 30分
+- **見積時間**: 45分
 - **担当**: Claude Code
 - **ブロッカー**: YouTubeビジネスアカウント確認必須
 
@@ -112,18 +128,19 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 - **担当**: Claude Code
 - **ブロッカー**: なし
 
-#### P0-5: Epidemic Sounds ライセンス登録 [優先度: 🟠]
-- [ ] **登録**: https://www.epidemicsound.com → Sign Up
-- [ ] **プラン**: Business/Content Creator ($99.99/年)
-- [ ] **支払い**: Stripe カード登録
-- [ ] **BGM ダウンロード**: サンプル5-10曲をダウンロード
+#### P0-5: Pixabay / YouTube Audio Library BGM準備 [優先度: 🟠]
+- [ ] **Pixabay BGM ダウンロード** (登録不要, 無料):
+  - [ ] https://pixabay.com/music/ からサンプル5-10曲をダウンロード
   - [ ] テンポ: 120-130 BPM (upbeat)
   - [ ] テンポ: 80-100 BPM (calm)
   - [ ] ジャンル: Lo-Fi, EDM, Ambient
-- [ ] **ライセンス確認**: ダウンロード時に "Commercial Use" 確認
+- [ ] **YouTube Audio Library** (無料):
+  - [ ] YouTube Studio → Audio Library からBGM追加ダウンロード
+  - [ ] 商用利用OK のトラックを選択
+- [ ] **ライセンス確認**: 商用利用OK＋クレジット表記要否を確認
 - [ ] **ストレージ**: `03_PROJECTS/ai_shorts_factory/assets/bgm/` に保存
 - **期限**: 2026-03-08
-- **見積時間**: 25分
+- **見積時間**: 15分
 - **担当**: Claude Code
 - **ブロッカー**: なし
 
@@ -158,10 +175,10 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
   ├── PLAN.md (ユーザーから)
   ├── scripts/
   │   ├── 01_generate_script.py      (Groq)
-  │   ├── 02_generate_images.py      (fal.ai)
-  │   ├── 03_video_generation.py     (Pika)
+  │   ├── 02_generate_images.py      (FLUX.2 [klein])
+  │   ├── 03_video_generation.py     (Ken Burns+FFmpeg/Wan 2.1)
   │   ├── 04_edit_and_bgm.py         (moviepy)
-  │   ├── 05_upload_and_post.py      (Ayrshare)
+  │   ├── 05_upload_and_post.py      (直接API: IG/YT/Pinterest)
   │   ├── 06_monitor_and_analyze.py  (Analytics)
   │   └── main_pipeline.py           (統括)
   ├── assets/
@@ -193,14 +210,9 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 #### P0-8: 環境変数＆設定ファイル作成 [優先度: 🔴]
 - [ ] **`.env` テンプレート作成**:
   ```
-  # fal.ai
-  FAL_API_KEY=xxx
-
-  # Pika
-  PIKA_API_KEY=xxx
-
-  # Ayrshare
-  AYRSHARE_API_KEY=xxx
+  # ComfyUI / FLUX.2 [klein] (ローカル)
+  COMFYUI_PATH=/path/to/ComfyUI
+  FLUX_MODEL_PATH=/path/to/ComfyUI/models/flux-klein-4b.safetensors
 
   # Groq
   GROQ_API_KEY=xxx (既存)
@@ -209,13 +221,13 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
   GCS_BUCKET=ai-shorts-factory
   GCS_KEYFILE=path/to/keyfile.json
 
-  # Epidemic Sounds (License info)
-  EPIDEMIC_LICENSE_YEAR=2026
-
-  # Platforms
+  # Platforms (直接API)
   YOUTUBE_CHANNEL_ID=xxx
+  YOUTUBE_OAUTH_TOKEN=xxx
   INSTAGRAM_ACCOUNT_ID=xxx
-  TIKTOK_ACCOUNT_ID=xxx
+  INSTAGRAM_ACCESS_TOKEN=xxx
+  PINTEREST_APP_ID=xxx
+  PINTEREST_ACCESS_TOKEN=xxx
   ```
 - [ ] **config.yaml 作成**:
   ```yaml
@@ -263,7 +275,7 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
   - [ ] テンプレート3 (制作過程): 複数枚の進行図案
   - [ ] テンプレート4 (金融ワンポイント): 既存CHとのシナジー案
 - [ ] **KNOWLEDGE.md 初期化**:
-  - [ ] "ハマりポイント予測" セクション (Pika, moviepy既知問題等)
+  - [ ] "ハマりポイント予測" セクション (Ken Burns+FFmpeg, Wan 2.1, moviepy既知問題等)
   - [ ] "解決策テンプレート" 雛形
 - **期限**: 2026-03-08
 - **見積時間**: 30分
@@ -321,46 +333,49 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 - **担当**: Claude Code
 - **ブロッカー**: P0-6
 
-#### P1W1-2: `02_generate_images.py` — fal.ai画像生成 [優先度: 🔴]
+#### P1W1-2: `02_generate_images.py` — FLUX.2 [klein] ローカル画像生成 [優先度: 🔴]
 - [ ] **関数設計**:
   ```python
   def generate_images_from_prompts(prompts_list, num_images=3):
     """
     Input: ["prompt1", "prompt2", "prompt3"]
     Output: ["image_1.png", "image_2.png", "image_3.png"]
+    ローカル FLUX.2 [klein] 4B via ComfyUI API
     """
   ```
 - [ ] **実装**:
-  - [ ] fal.ai API クライアント初期化
-  - [ ] バッチ処理 (並列 3-5 同時)
-  - [ ] 画像ダウンロード＆ローカル保存
+  - [ ] ComfyUI API クライアント初期化 (localhost:8188)
+  - [ ] バッチ処理 (順次実行、VRAM制約)
+  - [ ] 画像保存＆ローカル管理
   - [ ] メタデータ記録 (生成時間, seed等)
   - [ ] キャッシング (同じプロンプトの重複生成回避)
-  - [ ] リトライロジック (3回, Exponential Backoff)
-- [ ] **テスト**: プロンプト5つで画像生成テスト → メモリ確認
+  - [ ] リトライロジック (3回)
+  - [ ] フォールバック: Bing Image Creator
+- [ ] **テスト**: プロンプト5つで画像生成テスト → VRAM/メモリ確認
 - **期限**: 2026-03-12
 - **見積時間**: 2.5時間
 - **担当**: Claude Code
 - **ブロッカー**: P0-1
 
-#### P1W1-3: `03_video_generation.py` — Pika 動画化 [優先度: 🔴]
+#### P1W1-3: `03_video_generation.py` — Ken Burns + FFmpeg / Wan 2.1 動画化 [優先度: 🔴]
 - [ ] **関数設計**:
   ```python
-  def generate_video_from_image(image_path, motion_type="smooth", duration_sec=15):
+  def generate_video_from_image(image_path, motion_type="zoom_in", duration_sec=15):
     """
     Input: image_path (PNG 1024x1024)
     Output: video.mp4 (1080x1920, 30fps, H.264)
+    Ken Burns + FFmpeg (デフォルト) or Wan 2.1 (高品質)
     """
   ```
 - [ ] **実装**:
-  - [ ] Pika API クライアント
-  - [ ] 画像→MP4 変換
+  - [ ] Ken Burns + FFmpeg: zoompan フィルタでモーション付与 (コマンド1行)
+  - [ ] モーションタイプ: zoom_in, zoom_out, pan_left, pan_right
   - [ ] フォーマット自動選択 (Shorts/Reels/TikTok)
-  - [ ] 解像度变換 1024 → 1080x1920 (アスペクト比維持)
-  - [ ] エラーハンドリング (Pika API レート制限)
-  - [ ] Timeout 管理 (120秒以上の場合アラート)
+  - [ ] 解像度変換 1024 → 1080x1920 (アスペクト比維持)
+  - [ ] Wan 2.1 連携 (高品質が必要な場合, 8GB VRAM)
+  - [ ] エラーハンドリング
 - [ ] **テスト**: テスト画像3枚で動画生成 → MP4 再生確認
-- [ ] **フォールバック**: Runway Gen-3 (オプション, 後日実装)
+- [ ] **フォールバック**: AnimateDiff (OSS, Apache 2.0)
 - **期限**: 2026-03-13
 - **見積時間**: 2.5時間
 - **担当**: Claude Code
@@ -402,37 +417,39 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 - **期限**: 2026-03-14
 - **見積時間**: 3時間
 - **担当**: Claude Code
-- **ブロッカー**: P1W1-3 (Pika動画生成)
+- **ブロッカー**: P1W1-3 (Ken Burns+FFmpeg/Wan 2.1動画生成)
 
-#### P1W1-5: `05_upload_and_post.py` — Ayrshare投稿 [優先度: 🔴]
+#### P1W1-5: `05_upload_and_post.py` — 直接API投稿 (IG/YT/Pinterest) [優先度: 🔴]
 - [ ] **関数設計**:
   ```python
-  def post_to_platforms(video_path, caption, platforms=["youtube", "instagram", "tiktok"]):
+  def post_to_platforms(video_path, caption, platforms=["youtube", "instagram", "pinterest"]):
     """
     Input:
       - video_path: final_video.mp4
-      - caption: "🎨AIが描く猫 #AIアート #FLUX"
-      - platforms: ["youtube", "instagram", "tiktok"]
+      - caption: "AIが描く猫 #AIアート #FLUX"
+      - platforms: ["youtube", "instagram", "pinterest"]
 
     Output:
       {
         "youtube": {"post_id": "xxx", "status": "published"},
-        "instagram": {...},
-        "tiktok": {...}
+        "instagram": {"post_id": "xxx", "status": "published"},
+        "pinterest": {"pin_id": "xxx", "status": "published"}
       }
     """
   ```
 - [ ] **実装**:
-  - [ ] Ayrshare API クライアント初期化
-  - [ ] マルチプラットフォーム投稿 (並列)
+  - [ ] YouTube Data API クライアント (OAuth 2.0, 既存)
+  - [ ] Instagram Graph API クライアント (Facebook App)
+  - [ ] Pinterest API クライアント (OAuth 2.0)
+  - [ ] 各PF個別投稿 (並列)
   - [ ] キャプション最適化 (PF別のハッシュタグ数調整)
     - YouTube: 5個
     - Instagram: 30個 (スパム回避)
-    - TikTok: 3-5個 (キャプション内禁止)
+    - Pinterest: 5-10個
   - [ ] サムネイル処理:
     - YouTube: 自動生成 OR カスタム (1280x720)
     - Instagram: 自動 (Reels)
-    - TikTok: 自動
+    - Pinterest: 自動
   - [ ] エラーハンドリング:
     - API レート制限: キューイング
     - 認証エラー: リトライ＆アラート
@@ -440,9 +457,10 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
   - [ ] スケジューリング (後日):
     - デフォルト: 即座投稿
     - オプション: 時間指定投稿
-- [ ] **テスト**: テスト動画を3PF に投稿 → Dashboard で status 確認
+  - [ ] ※ X API は有料化のため除外
+- [ ] **テスト**: テスト動画を各PF に投稿 → 各PFで status 確認
 - **期限**: 2026-03-14
-- **見積時間**: 2.5時間
+- **見積時間**: 3時間
 - **担当**: Claude Code
 - **ブロッカー**: P0-3
 
@@ -484,10 +502,10 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
   def run_daily_pipeline(num_videos=3, dry_run=False):
     """
     1. テーマ＆台本生成 (Groq)
-    2. 画像生成 (fal.ai) × num_prompts
-    3. 動画化 (Pika) × num_images
+    2. 画像生成 (FLUX.2 [klein]) × num_prompts
+    3. 動画化 (Ken Burns+FFmpeg/Wan 2.1) × num_images
     4. 編集＆BGM (moviepy)
-    5. 投稿 (Ayrshare)
+    5. 投稿 (直接API: IG/YT/Pinterest)
     6. 分析記録 (Google Sheets)
     """
   ```
@@ -551,7 +569,7 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 - [ ] **ローカル環境確認**:
   - [ ] Python 3.9+ インストール確認
   - [ ] 依存ライブラリ一覧作成: `requirements.txt`
-    - fal, pika, ayrshare, groq, google-cloud-storage, moviepy 等
+    - groq, google-cloud-storage, moviepy, requests, google-auth 等
   - [ ] venv 環境セットアップ
   - [ ] テスト実行 1-2本確認
 - [ ] **EC2 デプロイ**:
@@ -602,7 +620,7 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
   - [ ] キャッシング強化 (同プロンプト画像再利用)
   - [ ] 画像リサイズの早期化 (1024→1080)
   - [ ] BGM プリロード (毎回ディスク読み込み回避)
-  - [ ] Batch API 利用の検討 (fal.ai)
+  - [ ] ComfyUI バッチ生成の最適化 (FLUX.2 [klein])
 - **期限**: 2026-03-23
 - **見積時間**: 2時間
 - **担当**: Claude Code
@@ -849,7 +867,7 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 - [ ] **通知自動化**:
   - [ ] 週1回レポート (日曜21:00 メール)
   - [ ] 異常値アラート (views < 平均30%で Slack)
-  - [ ] API コストアラート (月額 ¥6,000 超過時)
+  - [ ] API コストアラート (全ツール無料のため、想定外課金発生時に通知)
 - **期限**: 2026-04-14
 - **見積時間**: 3時間
 - **担当**: Claude Code
@@ -945,7 +963,7 @@ Phase 3: スケール (2026-04-08～2026-04-30) — 4週間
 |------|-----------|------|--------|
 | Avg Views / Video | > 500 | 7日移動平均 | Google Sheets |
 | Avg Engagement Rate | > 2% | 7日移動平均 | API集計 |
-| Follower Growth | > 50 | 週単位 | Ayrshare Dashboard |
+| Follower Growth | > 50 | 週単位 | 各PF API / Google Sheets |
 | CTR Estimate | > 1% | 推定値 | Google Sheets |
 
 ### 月次報告 (毎月末)

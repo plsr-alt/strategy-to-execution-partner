@@ -1,6 +1,6 @@
 # AI Shorts Factory — 仕様書
 
-**版番号**: v1.0
+**版番号**: v1.1
 **作成日**: 2026-03-07
 **最終更新**: 2026-03-07
 **ステータス**: 仕様確定
@@ -18,7 +18,7 @@
 | 本数 | 60本 | 90本 | 90本 | 90本 |
 | 本数/日 | 2本 | 3本 | 3本 | 3本 |
 | 想定月収 | 0-1万 | 1-3万 | 5-15万 | 10-30万 |
-| API月額 | ¥2,500 | ¥2,500 | ¥2,500 | ¥2,500 |
+| API月額 | ¥0 | ¥0 | ¥0 | ¥0 |
 
 ---
 
@@ -35,14 +35,14 @@
   │  └─ Output: 30-60秒台本 (JSON形式)
   │
 [Phase 1: 画像生成]
-  ├─ fal.ai FLUX.2: プロンプト→画像生成 ($0.03/枚)
+  ├─ ローカル FLUX.2 [klein] 4B (Apache 2.0, 無料): プロンプト→画像生成
   │  └─ Input: Groqが生成したプロンプト
   │  └─ Output: 1024x1024 PNG (3-5枚)
-  │  └─時間: 約30秒/枚
+  │  └─ 時間: 約0.5秒/枚 (6-12GB VRAM)
   │
 [Phase 2: 画像→動画変換]
-  ├─ Pika API ($8/月) OR Runway Gen-3 ($28/月): 静止画→動画化
-  │  └─ Input: 画像3-5枚 + テキスト指示
+  ├─ Ken Burns + FFmpeg (無料) / Wan 2.1 OSS (無料): 静止画→動画化
+  │  └─ Input: 画像3-5枚 + モーション指示
   │  └─ Output: MP4 (15-60秒)
   │  └─ 解像度: 1080x1920 (Shorts/Reels), 1080x1080 (TikTok)
   │  └─ 形式: MP4 H.264
@@ -50,15 +50,15 @@
 [Phase 3: 編集＆BGM追加]
   ├─ moviepy (既存資産): クリップ結合＆エフェクト
   │  ├─ 字幕: Groq台本から自動抽出 (SRT形式)
-  │  ├─ BGM: Epidemicサウンドライセンス ($99.99/年) or Pixabay
+  │  ├─ BGM: Pixabay (無料) / YouTube Audio Library (無料)
   │  ├─ 尺調整: 15-60秒に正規化
   │  └─ Output: Shorts/Reels/TikTok フォーマット別MP4
   │
 [Phase 4: 投稿]
-  ├─ Ayrshare API ($29/月): 3プラットフォーム同時投稿
-  │  ├─ YouTube Shorts (youtube_upload APIと並行)
-  │  ├─ Instagram Reels (business account)
-  │  └─ TikTok (TikTok API)
+  ├─ 直接API: Instagram Graph API + YouTube Data API + Pinterest API (全て無料)
+  │  ├─ YouTube Shorts (YouTube Data API, 既存無料)
+  │  ├─ Instagram Reels (Instagram Graph API, 無料)
+  │  └─ Pinterest (Pinterest API, 無料)
   │
 [Phase 5: モニタリング]
   ├─ Google Sheets: 日次統計
@@ -92,7 +92,7 @@
 ビットレート: 15 Mbps
 字幕: 自動生成（SRT）
 効果: エフェクト最小限（プラットフォームネイティブ機能使用推奨）
-BGM: YouTube Audio Library（無料）or Epidemic Sounds
+BGM: YouTube Audio Library（無料）or Pixabay（無料）
 尺: 15-60秒
 ```
 
@@ -103,7 +103,7 @@ BGM: YouTube Audio Library（無料）or Epidemic Sounds
 ビットレート: 10 Mbps
 字幕: 埋め込み（hardcode）推奨
 効果: Reels フォーマット最適化
-BGM: 著作権フリー or Epidemic Sounds
+BGM: Pixabay（無料）or YouTube Audio Library（無料）
 尺: 15-90秒（推奨30-60秒）
 ```
 
@@ -131,8 +131,8 @@ BGM: TikTok音声ライブラリ（クリエイター向け）
 
 [使用ツール]
 - Groq: プロンプト生成
-- fal.ai FLUX.2: 画像3枚
-- Pika/Runway: 各画像→動画化
+- FLUX.2 [klein]: 画像3枚
+- Ken Burns + FFmpeg / Wan 2.1: 各画像→動画化
 - moviepy: 結合＋字幕＋BGM
 ```
 
@@ -146,8 +146,8 @@ BGM: TikTok音声ライブラリ（クリエイター向け）
 - CTA: "フォロー→コメント" (2秒)
 
 [使用ツール]
-- fal.ai FLUX.2: Before/After 2パターン
-- Runway Gen-3: 遷移アニメーション
+- FLUX.2 [klein]: Before/After 2パターン
+- Ken Burns + FFmpeg / Wan 2.1: 遷移アニメーション
 - moviepy: 合成＋字幕
 ```
 
@@ -163,8 +163,8 @@ BGM: TikTok音声ライブラリ（クリエイター向け）
 
 [使用ツール]
 - Groq: プロンプト連続生成
-- fal.ai FLUX.2: 複数枚並行生成
-- Pika: 簡単な動画化
+- FLUX.2 [klein]: 複数枚並行生成
+- Ken Burns + FFmpeg / Wan 2.1: 簡単な動画化
 - moviepy: 高速カット＆BPM同期
 ```
 
@@ -179,7 +179,7 @@ BGM: TikTok音声ライブラリ（クリエイター向け）
 
 [使用ツール]
 - Groq: 今日の相場解説文 + プロンプト
-- fal.ai: 相場関連イラスト (5秒作成)
+- FLUX.2 [klein]: 相場関連イラスト (0.5秒作成)
 - moviepy: グラフ＋テキスト合成
 - BGM: 軽いBGM（テンション高め）
 ```
@@ -190,15 +190,15 @@ BGM: TikTok音声ライブラリ（クリエイター向け）
 
 ### 4.1 外部API構成
 
-| サービス | 用途 | 月額 | 特徴 | 代替 |
+| サービス | 用途 | 月額 | 特徴 | 備考 |
 |---------|------|------|------|------|
-| **fal.ai (FLUX.2)** | 画像生成 | ¥600 ($0.03/枚) | 高速・高品質 | Midjourney ($30) |
-| **Pika** | 画像→動画化 | ¥800 ($8/月) | 最速・軽量 | Runway ($28) |
-| **Ayrshare** | 3PF投稿管理 | ¥2,900 ($29/月) | スケジューリング＆分析 | Buffer ($29) |
+| **FLUX.2 [klein] 4B (ローカル)** | 画像生成 | ¥0 | Apache 2.0, 6-12GB VRAM | ComfyUI連携 |
+| **Ken Burns + FFmpeg / Wan 2.1** | 画像→動画化 | ¥0 | OSS | AnimateDiff代替可 |
+| **直接API (IG Graph / YT Data / Pinterest)** | 各PF個別投稿 | ¥0 | 個別実装 | X API は有料化のため除外 |
 | **Groq LLM** | 台本生成 | 無料 | 既存契約 | OpenAI |
-| **Epidemic Sounds** | BGM | ¥8,000 ($99.99/年) | 商用利用OK | Pixabay (無料) |
+| **Pixabay / YouTube Audio Library** | BGM | ¥0 | 商用利用OK | クレジット表記推奨 |
 | **YouTube Data API** | 投稿＆分析 | 無料 | 既存利用中 | — |
-| **TikTok API** | TikTok投稿 | 無料 | ビジネスアカウント必須 | — |
+| **Pinterest API** | Pinterest投稿 | 無料 | ビジネスアカウント必須 | — |
 | **Instagram Graph API** | Reels投稿 | 無料 | ビジネスアカウント必須 | — |
 
 ### 4.2 パイプライン処理フロー（詳細）
@@ -224,48 +224,44 @@ Output:
   - shorts_script_YYYYMMDD_HHmmss.json
 ```
 
-#### Step 2: 画像生成（fal.ai FLUX.2）
+#### Step 2: 画像生成（ローカル FLUX.2 [klein] 4B）
 ```python
 Input:
   - prompts: ["prompt1", "prompt2", "prompt3"]
-  - model: "fal-ai/flux.2" or "fal-ai/flux.1-pro"
+  - model: FLUX.2 [klein] 4B (ローカル実行)
   - dimensions: "1024x1024"
 
-API Call:
-  POST https://api.fal.ai/runs
-  Body: {
-    "model": "fal-ai/flux.2",
-    "input": {
-      "prompt": "...",
-      "image_size": "1024x1024",
-      "num_inference_steps": 30
-    }
-  }
-  Cost: $0.03/枚 (約30秒生成)
+Processing:
+  - ComfyUI API 経由でローカル推論
+  - VRAM: 6-12GB (fp16/fp8量子化対応)
+  - 生成速度: 約0.5秒/枚
+  - Cost: ¥0 (Apache 2.0 ライセンス)
+  - フォールバック: Bing Image Creator (無制限無料)
 
 Output:
   - image_{n}.png (1024x1024 PNG)
   - metadata.json (生成情報)
 ```
 
-#### Step 3: 動画化（Pika API）
+#### Step 3: 動画化（Ken Burns + FFmpeg / Wan 2.1）
 ```python
 Input:
   - images: [image_1.png, image_2.png, image_3.png]
-  - motion_direction: "pan_left" or "zoom" or "flow"
+  - motion_direction: "pan_left" or "zoom_in" or "zoom_out"
   - duration: 15-60 秒
 
-API Call:
-  POST https://api.pika.art/v1/generations
-  Body: {
-    "model": "pika-1.0",
-    "input": {
-      "prompt": "smooth motion, cinematic",
-      "image": "base64_encoded_image",
-      "motion": "subtle"
-    }
-  }
-  Cost: ¥800/月 (無制限)
+Processing (Ken Burns + FFmpeg):
+  # コマンド1行で実装可能
+  ffmpeg -loop 1 -i image.png -vf "zoompan=z='min(zoom+0.001,1.5)':d=150:s=1080x1920" \
+    -t 5 -c:v libx264 -pix_fmt yuv420p output.mp4
+  Cost: ¥0 (完全無料)
+
+Processing (Wan 2.1 1.3B, 高品質が必要な場合):
+  - Alibaba OSS モデル (8GB VRAM)
+  - VBench スコア 86%
+  - Cost: ¥0
+
+フォールバック: AnimateDiff (OSS, Apache 2.0)
 
 Output:
   - video_{n}.mp4 (1080x1920, 30fps, 15-60秒)
@@ -292,28 +288,35 @@ Output:
   - final_tiktok_YYYYMMDD_001.mp4 (1080x1920)
 ```
 
-#### Step 5: 投稿（Ayrshare API）
+#### Step 5: 投稿（直接API: Instagram Graph API + YouTube Data API + Pinterest API）
 ```python
 Input:
   - video_path: final_shorts_YYYYMMDD_001.mp4
-  - platforms: ["youtube", "instagram", "tiktok"]
-  - caption: "🎨AIが描く○○..."
+  - platforms: ["youtube", "instagram", "pinterest"]
+  - caption: "AIが描く○○..."
   - hashtags: ["#AIアート", "#FLUX", "#ショート動画"]
   - schedule_time: "2026-03-07T20:00:00Z" (オプション)
 
-API Call:
-  POST https://app.ayrshare.com/api/post
-  Body: {
-    "post": "🎨AIが描く○○...",
-    "platforms": ["youtube", "instagram", "tiktok"],
-    "media": ["video_base64"],
-    "mediaType": "video",
-    "schedule": "2026-03-07T20:00:00Z"
-  }
+API Calls (各PF個別):
+  [YouTube Data API]
+  POST https://www.googleapis.com/upload/youtube/v3/videos
+  - OAuth 2.0 認証 (既存)
+  - Cost: ¥0
+
+  [Instagram Graph API]
+  POST https://graph.facebook.com/v17.0/{ig-user-id}/media
+  - ビジネスアカウント + Facebook App
+  - Cost: ¥0
+
+  [Pinterest API]
+  POST https://api.pinterest.com/v5/pins
+  - ビジネスアカウント
+  - Cost: ¥0
+
+  ※ X API は2026年2月7日から完全有料化のため除外
 
 Output:
-  - Ayrshare Dashboard: 投稿状態確認
-  - post_ids: ["youtube_xxxx", "ig_xxxx", "tiktok_xxxx"]
+  - post_ids: {"youtube": "xxx", "instagram": "xxx", "pinterest": "xxx"}
 ```
 
 #### Step 6: 分析＆モニタリング
@@ -373,7 +376,7 @@ Output:
 - **ブロック対策**:
   - 投稿間隔: 4時間以上（アルゴリズム学習）
   - キャプション重複禁止（テンプレート変更推奨）
-  - 著作権チェック: Epidemic Sounds ライセンス確認
+  - 著作権チェック: Pixabay / YouTube Audio Library ライセンス確認
 
 #### TikTok
 - **必須**: TikTok Business Account + TikTok API Access
@@ -393,7 +396,7 @@ Output:
 
 | リスク | 対策 | 優先度 |
 |--------|------|--------|
-| **BGM著作権** | Epidemic Sounds ($99.99/年) ライセンス確認 + クレジット表記 | 🔴 必須 |
+| **BGM著作権** | Pixabay / YouTube Audio Library (無料, 商用OK) + クレジット表記推奨 | 🔴 必須 |
 | **FLUX画像著作権** | 生成画像は個人商用OK（利用規約確認） | 🟠 重要 |
 | **顔認識（AI生成）** | 実在人物の顔生成NG（各PF規約違反） | 🔴 必須 |
 | **金融情報（免責事項）** | "投資助言ではありません" を必ずCTA表記 | 🟠 重要 |
@@ -405,16 +408,16 @@ Output:
 
 #### YouTube Shorts 規約
 - [ ] アップロード前: 著作権チェック（Content ID）
-- [ ] BGM: YouTube Audio Library OR Epidemic Sounds
+- [ ] BGM: YouTube Audio Library OR Pixabay (無料)
 - [ ] 字幕: 自動生成を確認（英語設定で自動翻訳）
 - [ ] タグ: "#Shorts" 必須
 - [ ] サムネイル: 自動生成 OR カスタム (最小1280x720)
 - [ ] 説明欄: キャプション＋外部リンク（1個まで）
-- [ ] コンテンツID登録: Epidemic Sounds CDN提供
+- [ ] コンテンツID登録: Pixabay / YouTube Audio Library 使用確認
 
 #### Instagram Reels 規約
 - [ ] ビジネスアカウント確認
-- [ ] 著作権: Instagram Licensed Music Library OR Epidemic
+- [ ] 著作権: Instagram Licensed Music Library OR Pixabay (無料)
 - [ ] キャプション: 最大2200文字（Shorts規約はなし）
 - [ ] ハッシュタグ: 最大30個（スパム防止）
 - [ ] リンク: Linktree等に統一（direct link NG）
@@ -423,7 +426,7 @@ Output:
 
 #### TikTok 規約
 - [ ] 個人認証: 身分証による本人確認
-- [ ] BGM: TikTok Sounds Library OR Epidemic（注意）
+- [ ] BGM: TikTok Sounds Library OR Pixabay（無料）
 - [ ] コンテンツポリシー: AI明記推奨（#AIアート）
 - [ ] リンク: プロフィールのみ（キャプション内NG）
 - [ ] 動画長: 15-60秒推奨（15-10分対応だが短尺最適）
@@ -438,36 +441,36 @@ Output:
 
 | 項目 | 単価 | 月間使用量 | 月額 | 備考 |
 |------|------|-----------|------|------|
-| **fal.ai FLUX.2** | $0.03/枚 | 300枚 (90本×3-4枚) | ¥900 | 最低保証なし |
-| **Pika** | ¥800 | 無制限 | ¥800 | 副業向けプラン |
-| **Ayrshare** | ¥2,900 | 無制限 | ¥2,900 | 3PF同時投稿管理 |
-| **Epidemic Sounds** | ¥667/月 | 無制限BGM | ¥667 | 年額¥8,000÷12 |
+| **FLUX.2 [klein] 4B** | ¥0 | 無制限 | ¥0 | ローカル実行 (Apache 2.0) |
+| **Ken Burns + FFmpeg / Wan 2.1** | ¥0 | 無制限 | ¥0 | OSS / コマンド1行 |
+| **直接API (IG/YT/Pinterest)** | ¥0 | 無制限 | ¥0 | 各PF個別実装 |
+| **Pixabay / YouTube Audio Library** | ¥0 | 無制限 | ¥0 | 商用利用OK |
 | **Groq API** | 無料 | 無制限 | ¥0 | 既存契約 |
 | **YouTube Data API** | 無料 | 10,000ユニット/日 | ¥0 | 既存利用中 |
-| **Instagram/TikTok API** | 無料 | 無制限 | ¥0 | 認証済み |
+| **Instagram/Pinterest API** | 無料 | 無制限 | ¥0 | 認証済み |
 | **EC2サーバー** (既存) | ¥3,000 | 共用 | ¥0 | youtube_pipeline と共用 |
 | **ストレージ** (GCS/S3) | ¥100 | 動画キャッシュ | ¥100 | 30日自動削除 |
 | **監視ツール** (Datadog等) | 無料 | 基本プラン | ¥0 | 必要に応じて拡張 |
 
-**合計**: 約¥5,367/月 （90本/月時点）
+**合計**: 約¥0/月 （API・ツール費用ゼロ。EC2/ストレージは既存共用）
 
 ### 6.2 スケール別コスト
 
 | スケール | 本数/月 | 月額 | 本あたりコスト |
 |---------|--------|------|---------------|
-| **Phase 1** (2本/日) | 60本 | ¥4,200 | ¥70 |
-| **Phase 2** (3本/日) | 90本 | ¥5,367 | ¥60 |
-| **Phase 3** (5本/日) | 150本 | ¥7,200 | ¥48 |
-| **Phase 4** (10本/日) | 300本 | ¥11,000 | ¥37 |
+| **Phase 1** (2本/日) | 60本 | ¥0 | ¥0 |
+| **Phase 2** (3本/日) | 90本 | ¥0 | ¥0 |
+| **Phase 3** (5本/日) | 150本 | ¥0 | ¥0 |
+| **Phase 4** (10本/日) | 300本 | ¥0 | ¥0 |
 
 ### 6.3 収入試算
 
 | 期間 | 月本数 | YT Shorts推定 | IG推定 | TikTok推定 | 合計月収 | コスト | 利益 |
 |------|--------|---|---|---|-----------|--------|------|
-| 1ヶ月目 | 60 | ¥500 | ¥300 | ¥200 | ¥1,000 | ¥4,200 | -¥3,200 |
-| 3ヶ月目 | 90 | ¥5,000 | ¥2,000 | ¥1,000 | ¥8,000 | ¥5,367 | +¥2,633 |
-| 6ヶ月目 | 90 | ¥30,000 | ¥8,000 | ¥3,000 | ¥41,000 | ¥5,367 | +¥35,633 |
-| 12ヶ月目 | 90 | ¥50,000 | ¥15,000 | ¥5,000 | ¥70,000 | ¥5,367 | +¥64,633 |
+| 1ヶ月目 | 60 | ¥500 | ¥300 | ¥200 | ¥1,000 | ¥0 | +¥1,000 |
+| 3ヶ月目 | 90 | ¥5,000 | ¥2,000 | ¥1,000 | ¥8,000 | ¥0 | +¥8,000 |
+| 6ヶ月目 | 90 | ¥30,000 | ¥8,000 | ¥3,000 | ¥41,000 | ¥0 | +¥41,000 |
+| 12ヶ月目 | 90 | ¥50,000 | ¥15,000 | ¥5,000 | ¥70,000 | ¥0 | +¥70,000 |
 
 **[推測]** 収入試算は以下の仮定に基づく:
 - 1PF平均 1,000-10,000 views/動画（成長曲線）
@@ -483,8 +486,8 @@ Output:
 | リスク | 発生確率 | 影響度 | 対策 |
 |--------|---------|--------|------|
 | **API Rate Limit超過** | 中 | 高 | キューイング システム＋バックオフ (Exponential) |
-| **動画生成失敗（Pika）** | 低 | 中 | 自動リトライ (3回)＋ Runway フォールバック |
-| **BGM著作権侵害** | 低 | 高 | Epidemic Sounds License 確認自動化 |
+| **動画生成失敗（Ken Burns/Wan 2.1）** | 低 | 中 | 自動リトライ (3回)＋ AnimateDiff フォールバック |
+| **BGM著作権侵害** | 低 | 高 | Pixabay / YouTube Audio Library ライセンス確認自動化 |
 | **プラットフォーム停止** | 極低 | 高 | スケジュール投稿（事前）＋監視ダッシュボード |
 | **データ損失** | 低 | 中 | GCS バックアップ (自動, 7日保持) |
 
@@ -495,7 +498,7 @@ Output:
 | **新規アカウント制限** | TikTok アカウント作成3ヶ月前倒し（育成期間確保） | 🔴 必須 |
 | **アルゴリズム変動** | 日次エンゲージメント分析 → 週次テーマ最適化 | 🟠 重要 |
 | **競合増加** | ニッチテーマ深掘り（金融×AI 等の複合） | 🟡 推奨 |
-| **プラットフォーム規約変更** | Ayrshare 監視＋月次規約チェック | 🟡 推奨 |
+| **プラットフォーム規約変更** | 各PF API 直接監視＋月次規約チェック | 🟡 推奨 |
 
 ---
 
@@ -504,18 +507,19 @@ Output:
 | 版番 | 日付 | 変更内容 | 作成者 |
 |------|------|---------|--------|
 | v1.0 | 2026-03-07 | 仕様書初版作成 | Claude Code |
-| — | — | — | — |
+| v1.1 | 2026-03-07 | 無料ツール構成に全面更新 (fal.ai→FLUX.2 [klein], Pika→Ken Burns+FFmpeg/Wan 2.1, Ayrshare→直接API, Epidemic→Pixabay/YT Audio Library) | Claude Code |
 
 ---
 
 ## 付録: 用語集
 
-- **FLUX.2**: fal.ai の最新画像生成モデル (FLUX.1 Pro の改良版)
+- **FLUX.2 [klein] 4B**: Apache 2.0 ライセンスの画像生成モデル。ローカル実行可能 (6-12GB VRAM, 0.5秒生成)
 - **CPM (Cost Per Mille)**: 1000インプレッションあたりの広告単価
-- **Ayrshare**: YouTube/Instagram/TikTok/X 等を一元管理する投稿管理ツール
-- **Epidemic Sounds**: 商用利用OKの BGM / SE ライセンスサービス
-- **Pika**: テキストまたは画像から高速に動画を生成するAIツール
-- **Runway Gen-3**: テキスト or 画像→動画変換（高品質・時間要要）
+- **Ken Burns エフェクト**: 静止画にズーム/パンのモーションを付ける手法。FFmpegのzoompanフィルタで実装
+- **Wan 2.1 1.3B**: Alibaba 提供の OSS 画像→動画生成モデル (8GB VRAM, VBench 86%)
+- **AnimateDiff**: OSS (Apache 2.0) の画像→動画アニメーション生成モデル
+- **Pixabay**: 無料の BGM / SE / 画像素材サービス (商用利用OK, クレジット表記推奨)
+- **ComfyUI**: ローカル AI 画像生成のための GUI / API ツール
 - **VTT / SRT**: 字幕フォーマット
 - **Content ID**: YouTube の著作権管理システム
 - **Graph API**: Meta が提供する Facebook/Instagram 向け API

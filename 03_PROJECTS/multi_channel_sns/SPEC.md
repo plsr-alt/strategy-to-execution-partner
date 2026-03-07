@@ -24,7 +24,7 @@ YouTube 動画完成イベント
   └→ (TikTok: 将来)
        ↓
 [SNS 投稿モジュール]
-  ├→ Ayrshare API / 個別 API 呼び出し
+  ├→ 直接API: Instagram Graph API + Pinterest API (X API は有料化のため除外)
   ├→ スケジュール管理（投稿時刻制御）
   └→ レスポンス検証 → ログ保存
        ↓
@@ -40,7 +40,7 @@ YouTube 動画完成イベント
 | プラットフォーム | 投稿タイミング | 理由 |
 |------------|----------|------|
 | **YouTube** | T+0時間 | 投稿当日、9:00 JST |
-| **X** | T+0時間 | 即座に反応獲得（リアルタイム性重視） |
+| **X** | T+0時間 | 即座に反応獲得（リアルタイム性重視）⚠️ X API 2026年2月7日に完全有料化。手動投稿に切替 |
 | **Instagram** | T+2時間 | 時間差で視聴者重複を避ける（エンゲージ分散） |
 | **Pinterest** | T+24時間 | ピンの検索インデックス遅延を考慮 |
 | **TikTok** | T+72時間 | 短尺動画トレンドに同期（将来） |
@@ -49,62 +49,23 @@ YouTube 動画完成イベント
 
 ## 2. 各 SNS API 仕様・制限事項
 
-### 2.1 Ayrshare API
+### 2.1 投稿方式の変更（2026年3月更新）
 
-#### 基本仕様
+**旧方式**: Ayrshare API ($29/月) による一括投稿
+**新方式**: 各プラットフォームAPIへの直接投稿（無料）
 
-| 項目 | 仕様値 | 備考 |
-|-----|------|------|
-| **エンドポイント** | `https://api.ayrshare.com/api/post` | POST リクエスト |
-| **認証** | Bearer Token（API Key） | `.env` で管理 |
-| **レート制限** | 300 req/10分 | $29/月プラン |
-| **タイムアウト** | 30秒 | リトライ 3回（指数バックオフ） |
-| **対応 SNS** | Instagram / X / Pinterest / TikTok | TikTok は審査必須 |
+| プラットフォーム | API | 月額 | 備考 |
+|---|---|---|---|
+| Instagram | Graph API v17.0 | ¥0 | ビジネスアカウント必須。フィード投稿のみ（Reels/Stories非対応） |
+| Pinterest | Pinterest API v5 | ¥0 | ビジネスアカウント必須 |
+| YouTube | YouTube Data API v3 | ¥0 | 既存利用中 |
+| X (Twitter) | ❌ 有料化 | — | 2026年2月7日から従量課金。手動投稿に切替 |
 
-#### リクエスト形式
+#### 変更理由
 
-```json
-{
-  "post": "投稿テキスト",
-  "platforms": ["instagram", "twitter", "pinterest"],
-  "mediaUrls": ["https://example.com/image.jpg"],
-  "scheduledDate": "2026-03-07T10:00:00Z",
-  "shortUrls": {
-    "instagram": "https://youtube.com/watch?v=ABC123"
-  }
-}
-```
-
-#### レスポンス形式
-
-```json
-{
-  "id": "POST_ID_xxx",
-  "success": true,
-  "platforms": {
-    "instagram": {
-      "id": "IG_POST_ID",
-      "url": "https://instagram.com/p/ABC123"
-    },
-    "twitter": {
-      "id": "TWEET_ID",
-      "url": "https://twitter.com/user/status/123456"
-    },
-    "pinterest": {
-      "id": "PIN_ID",
-      "url": "https://pinterest.com/pin/123456"
-    }
-  }
-}
-```
-
-#### 制限事項
-
-- **メディアアップロード**: URL参照のみ（ローカルファイルアップロード不可）
-  → YouTube CDN に動画をホストし、そのURLをAyrshareに渡す
-- **Instagram 動画**: リール（Reels）は非対応、フィード投稿のみ
-- **X 動画**: 15MB以下、MP4形式
-- **Pinterest**: 最大2000x2000px、SVGは非対応
+- Ayrshare API は $29/月の固定費が発生。月産15本程度では費用対効果が低い
+- Instagram Graph API / Pinterest API は無料で直接利用可能
+- X API は2026年2月7日から完全有料化（Free tier 廃止）のため自動投稿を断念
 
 ---
 
@@ -134,6 +95,15 @@ YouTube 動画完成イベント
 
 ### 2.3 X API v2
 
+> ⚠️ **重要: X API は2026年2月7日から完全有料化**
+> Free tier が廃止され、全てのリクエストが従量課金に移行。
+> - 投稿読取: $0.005/リクエスト
+> - ユーザー読取: $0.010/リクエスト
+> - 投稿作成: 有料プラン必須
+>
+> **推奨対応**: 自動投稿は断念し、手動投稿 or IFTTT連携に切替。
+> コンテンツ変換エンジンでテキスト生成のみ行い、手動コピペで投稿する運用とする。
+
 #### 基本仕様
 
 | 項目 | 仕様値 |
@@ -142,6 +112,7 @@ YouTube 動画完成イベント
 | **メディア** | 画像4枚 or 動画1本 |
 | **リプライ制限** | 連続リプライ不可（1リプライ = 1投稿扱い） |
 | **URL短縮** | `t.co` 自動（計23文字） |
+| **API料金** | ❌ 有料化（2026年2月7日〜）— 自動投稿不可 |
 
 #### テキスト最適化例
 
@@ -436,92 +407,125 @@ def resize_to_pinterest(youtube_thumbnail_path: str, title: str) -> str:
 
 ---
 
-## 4. Ayrshare API 統合方法
+## 4. SNS 直接API統合方法（Ayrshare 廃止後）
 
-### 4.1 基本フロー
+### 4.1 Instagram Graph API クライアント
 
 ```python
-import aiohttp
-from datetime import datetime, timedelta
+import httpx
+from datetime import datetime
 
-class AyrshareClient:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "https://api.ayrshare.com/api"
-        self.session = None
+class InstagramClient:
+    """
+    Instagram Graph API v17.0 を使ったフィード投稿
 
-    async def post_to_sns(
-        self,
-        text: str,
-        platforms: list,
-        media_urls: list = None,
-        scheduled_date: str = None,
-        short_urls: dict = None,
-    ) -> dict:
+    前提:
+    - ビジネスアカウント or クリエイターアカウント
+    - Facebook ページと連携済み
+    - Graph API トークン取得済み（.env で管理）
+    """
+
+    def __init__(self, access_token: str, ig_user_id: str):
+        self.access_token = access_token
+        self.ig_user_id = ig_user_id
+        self.base_url = "https://graph.facebook.com/v17.0"
+
+    async def post_image(self, image_url: str, caption: str) -> dict:
         """
-        複数 SNS への一括投稿
+        Instagram フィード画像投稿（2ステップ）
 
-        Args:
-            text: 投稿テキスト
-            platforms: ["instagram", "twitter", "pinterest"]
-            media_urls: ["https://...image.jpg"]
-            scheduled_date: ISO 8601 形式（例: "2026-03-07T10:00:00Z"）
-            short_urls: プラットフォーム別のURL短縮設定
-
-        Returns:
-            {
-              "id": "POST_ID",
-              "success": true,
-              "platforms": {...}
-            }
+        Step 1: メディアコンテナ作成
+        Step 2: メディア公開
         """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            # Step 1: コンテナ作成
+            container_resp = await client.post(
+                f"{self.base_url}/{self.ig_user_id}/media",
+                params={
+                    "image_url": image_url,
+                    "caption": caption,
+                    "access_token": self.access_token,
+                },
+            )
+            container = container_resp.json()
+            container_id = container["id"]
 
-        payload = {
-            "post": text,
-            "platforms": platforms,
-        }
-
-        if media_urls:
-            payload["mediaUrls"] = media_urls
-
-        if scheduled_date:
-            payload["scheduledDate"] = scheduled_date
-
-        if short_urls:
-            payload["shortUrls"] = short_urls
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.base_url}/post",
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-                else:
-                    raise Exception(f"Ayrshare API Error: {resp.status}")
+            # Step 2: 公開
+            publish_resp = await client.post(
+                f"{self.base_url}/{self.ig_user_id}/media_publish",
+                params={
+                    "creation_id": container_id,
+                    "access_token": self.access_token,
+                },
+            )
+            return publish_resp.json()
 ```
 
-### 4.2 エラーハンドリング
+### 4.2 Pinterest API クライアント
 
 ```python
-class AyrshareRetryHandler:
+class PinterestClient:
     """
-    Ayrshare API 呼び出しのリトライ・エラーハンドリング
+    Pinterest API v5 を使ったピン投稿
+
+    前提:
+    - ビジネスアカウント
+    - API アプリ登録済み
+    - アクセストークン取得済み
+    """
+
+    def __init__(self, access_token: str):
+        self.access_token = access_token
+        self.base_url = "https://api.pinterest.com/v5"
+
+    async def create_pin(
+        self, board_id: str, title: str, description: str,
+        image_url: str, link: str
+    ) -> dict:
+        """
+        Pinterest ピン作成
+
+        Args:
+            board_id: 投稿先ボード ID
+            title: ピンタイトル（40字以内推奨）
+            description: SEO最適化テキスト（80-150字）
+            image_url: 画像 URL（1000x1500推奨）
+            link: YouTube 動画リンク
+        """
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{self.base_url}/pins",
+                headers={
+                    "Authorization": f"Bearer {self.access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "board_id": board_id,
+                    "title": title,
+                    "description": description,
+                    "media_source": {
+                        "source_type": "image_url",
+                        "url": image_url,
+                    },
+                    "link": link,
+                },
+            )
+            return resp.json()
+```
+
+### 4.3 SNS リトライハンドラー（共通）
+
+```python
+class SNSRetryHandler:
+    """
+    各 SNS API 呼び出しの共通リトライ・エラーハンドリング
     """
 
     @staticmethod
     async def post_with_retry(
-        client: AyrshareClient,
-        text: str,
-        platforms: list,
-        media_urls: list = None,
+        post_func,
         max_retries: int = 3,
+        **kwargs,
     ) -> dict:
         """
         指数バックオフでリトライ
@@ -534,26 +538,25 @@ class AyrshareRetryHandler:
         """
         for attempt in range(max_retries):
             try:
-                result = await client.post_to_sns(
-                    text=text,
-                    platforms=platforms,
-                    media_urls=media_urls,
-                )
+                result = await post_func(**kwargs)
                 return {"status": "success", "data": result}
 
             except Exception as e:
                 wait_time = 5 * (3 ** attempt)  # 5, 15, 45
                 logger.warning(
-                    f"Ayrshare API failed (attempt {attempt+1}/{max_retries}). "
+                    f"SNS API failed (attempt {attempt+1}/{max_retries}). "
                     f"Retrying in {wait_time}s. Error: {str(e)}"
                 )
 
                 if attempt < max_retries - 1:
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.error(f"Ayrshare API failed after {max_retries} retries.")
+                    logger.error(f"SNS API failed after {max_retries} retries.")
                     return {"status": "failed", "error": str(e)}
 ```
+
+> **Note**: YouTube は既存パイプラインで対応済み。X (Twitter) は API 有料化のため自動投稿対象外。
+> X 向けテキストはコンテンツ変換エンジンで生成し、手動投稿する運用とする。
 
 ---
 
@@ -606,9 +609,10 @@ import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 class SNSScheduler:
-    def __init__(self, ayrshare_client: AyrshareClient):
+    def __init__(self, instagram_client: InstagramClient, pinterest_client: PinterestClient):
         self.scheduler = AsyncIOScheduler()
-        self.client = ayrshare_client
+        self.instagram = instagram_client
+        self.pinterest = pinterest_client
         self.queue = {}  # {post_id: [待機中の投稿]}
 
     async def schedule_post(
@@ -637,14 +641,32 @@ class SNSScheduler:
         logger.info(f"Scheduled post {post_id} at {scheduled_date}")
 
     async def _execute_post(self, post_id: str, content: dict):
-        """実際の投稿実行"""
-        result = await AyrshareRetryHandler.post_with_retry(
-            client=self.client,
-            **content,
-        )
+        """実際の投稿実行（各プラットフォームAPI直接呼び出し）"""
+        results = {}
+
+        # Instagram 投稿
+        if "instagram" in content.get("platforms", []):
+            results["instagram"] = await SNSRetryHandler.post_with_retry(
+                self.instagram.post_image,
+                image_url=content["media_urls"][0],
+                caption=content["text_instagram"],
+            )
+
+        # Pinterest 投稿
+        if "pinterest" in content.get("platforms", []):
+            results["pinterest"] = await SNSRetryHandler.post_with_retry(
+                self.pinterest.create_pin,
+                board_id=content["pinterest_board_id"],
+                title=content["title_pinterest"],
+                description=content["text_pinterest"],
+                image_url=content["media_urls"][0],
+                link=content["youtube_url"],
+            )
+
+        # X は手動投稿のため自動投稿対象外
 
         # ログ保存
-        self._save_posting_log(post_id, result)
+        self._save_posting_log(post_id, results)
 ```
 
 ---
@@ -655,7 +677,7 @@ class SNSScheduler:
 
 | エラーシナリオ | 原因 | 対応策 |
 |------------|------|--------|
-| **Ayrshare API 5XX** | サーバー側エラー | 指数バックオフリトライ（3回） |
+| **SNS API 5XX** | サーバー側エラー | 指数バックオフリトライ（3回） |
 | **ネットワークタイムアウト** | API応答遅延 | 30秒タイムアウト + リトライ |
 | **認証エラー（401）** | API Key 無効 | `.env` 再確認・ログアラート |
 | **メディアURL不正** | 画像 URL 期限切れ/存在しない | CDN キャッシュ確認・リアップロード |
@@ -718,12 +740,14 @@ class PostingLog:
 
 | サービス | 料金 | 使用量（想定） | 月額 | 備考 |
 |---------|------|-------------|------|------|
-| **Ayrshare API** | $29/月 | 月産15本 × 3SNS = 45投稿 | $29 | レート制限：300/10分（余裕十分） |
-| **Groq API** | $0 | 月産40本 × 5回/本 = 200呼び出し | $0 | 無料枠内（FreeモデルLlama 3.1） |
-| **YouTube Data API** | $0 | 無料 | $0 | 400万 requests/日まで無料 |
-| **Pexels/Unsplash** | $0 | API 呼び出し無制限 | $0 | 無料 |
+| **Instagram Graph API** | ¥0 | 月産15本投稿 | ¥0 | ビジネスアカウント必須。無料 |
+| **Pinterest API v5** | ¥0 | 月産15本投稿 | ¥0 | ビジネスアカウント必須。無料 |
+| **X (Twitter) API** | ❌ 除外 | — | — | 2026年2月7日から有料化。手動投稿に切替 |
+| **Groq API** | ¥0 | 月産40本 × 5回/本 = 200呼び出し | ¥0 | 無料枠内（FreeモデルLlama 3.1） |
+| **YouTube Data API** | ¥0 | 無料 | ¥0 | 400万 requests/日まで無料 |
+| **Pexels/Unsplash** | ¥0 | API 呼び出し無制限 | ¥0 | 無料 |
 | **EC2（既存）** | $10-15/月 | 既に運用中 | 含む | YouTube パイプライン共用 |
-| **合計** | — | — | **$29/月** | 低コスト！ |
+| **合計** | — | — | **¥0/月**（EC2除く） | Ayrshare $29/月を完全排除！ |
 
 ### 7.2 ROI 試算
 
@@ -761,7 +785,7 @@ YouTube 登録者増加:
 
 | 機能 | MVP（Phase 1） | V1（Phase 2+） | 優先度 |
 |-----|-------------|-----------|--------|
-| **Ayrshare API 統合** | ✅ Instagram/X/Pinterest | + TikTok 個別API化 | **MUST** |
+| **SNS 直接API統合** | ✅ Instagram/Pinterest（X は手動） | + TikTok 個別API化 | **MUST** |
 | **コンテンツ変換** | ✅ 3SNS用テキスト自動生成 | + 個別画像最適化 | **MUST** |
 | **スケジューリング** | ✅ 時差投稿（T+0/+2/+24） | + A/Bテスト機能 | **SHOULD** |
 | **エラーハンドリング** | ✅ リトライ3回 + ログ | + アラート通知 | **SHOULD** |
@@ -776,16 +800,18 @@ YouTube 登録者増加:
 
 ```
 .env（Git無視）:
-AYRSHARE_API_KEY=xxx
 GROQ_API_KEY=xxx
-INSTAGRAM_GRAPH_API_TOKEN=xxx（将来）
+INSTAGRAM_GRAPH_API_TOKEN=xxx
+INSTAGRAM_BUSINESS_ACCOUNT_ID=xxx
+PINTEREST_API_KEY=xxx
 ```
 
 ### 9.2 レート制限遵守
 
 ```python
 # Groq: 30 req/min 以下
-# Ayrshare: 300 req/10min 以下
+# Instagram Graph API: 200 req/hour 以下
+# Pinterest API: 1000 req/day 以下
 # Pexels: 200 req/hour 以下
 
 from ratelimit import limits, sleep_and_retry

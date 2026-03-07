@@ -131,17 +131,17 @@
 - **キャプション作成**: 各画像に "a woman, professional outfit, neutral background" 等のテキストラベル付け
 
 #### ステップ2: LoRA 学習実行
-- **プラットフォーム**: fal.ai (推奨) or LocalLoRA
+- **プラットフォーム**: Google Colab無料枠 (T4 16GB) or ローカルGPU
 - **パラメータ**:
   - Learning Rate: 0.0001-0.0004
   - Iterations: 500-1000
   - Train Batch Size: 4-8
   - LoRA Rank: 32-64
-- **コスト**: $0.50/回学習（fal.ai）
+- **コスト**: ¥0（Colab無料枠 or ローカル）
 - **時間**: 5-15分/回
 
 #### ステップ3: モデルマージ・テスト
-- **マージ**: LoRA重み + ベースモデル（FLUX.1-dev）の統合
+- **マージ**: LoRA重み + ベースモデル（FLUX.2 [klein] 4B or FLUX.1 [schnell]）の統合
 - **テスト生成**: 同じプロンプトで複数枚生成し、一貫性評価
 - **目標**: 一貫性スコア 98% 以上（顔・髪型・服装が統一）
 
@@ -162,7 +162,7 @@
 
 ### 2-3. 再学習サイクル
 - **頻度**: 月1回（新しい衣装・背景追加時）
-- **コスト**: $0.50 x 30回 = $15/月
+- **コスト**: ¥0（Colab / ローカル実行）
 - **効果**: フレッシュさ維持、多様性確保
 
 ---
@@ -180,7 +180,7 @@
                            ↓
 ┌─────────────────────────────────────────────────────┐
 │ 2. 画像自動生成（毎日夜23時）                       │
-│  - fal.ai API → FLUX.2 + LoRA実行                 │
+│  - ローカル FLUX.2 [klein] + ComfyUI → LoRA実行    │
 │  - 出力: 高解像度画像 1080x1350 (Instagram最適)   │
 └─────────────────────────────────────────────────────┘
                            ↓
@@ -194,7 +194,7 @@
 ┌─────────────────────────────────────────────────────┐
 │ 4. 投稿スケジューリング                             │
 │  - Instagram Graph API → 24h後投稿予約            │
-│  - X API v2 → 30分後投稿予約                       │
+│  - X → 手動投稿 or IFTTT連携（API有料化のため）     │
 │  - ベストタイム自動検出: 朝7時/昼12時/夕17時/夜20時 │
 └─────────────────────────────────────────────────────┘
                            ↓
@@ -210,29 +210,28 @@
 
 | 層 | ツール/言語 | 役割 |
 |---|-----------|------|
-| **画像生成** | fal.ai API (Python) | FLUX.2 + LoRA実行 |
-| **テキスト生成** | Groq API (Python) | 投稿文自動作成 |
-| **投稿スケジューリング** | Instagram Graph API, X API v2 | SNS投稿予約 |
+| **画像生成** | ローカル FLUX.2 [klein] + ComfyUI (Python) | FLUX.2 + LoRA実行（無料） |
+| **テキスト生成** | Groq API (Python) | 投稿文自動作成（無料） |
+| **投稿スケジューリング** | Instagram Graph API (無料) ※X API は2026年2月有料化のため除外 | SNS投稿予約 |
 | **オーケストレーション** | GitHub Actions/Cloud Run | 定時実行（cron） |
 | **データ保管** | Google Sheets/Notion API | コンテンツカレンダー管理 |
-| **モニタリング** | Google Analytics, Sprout Social | エンゲージメント追跡 |
+| **モニタリング** | Google Sheets + Instagram Insights API (無料) | エンゲージメント追跡 |
 
 ### 3-3. 実装フロー（Python 疑似コード）
 
 ```python
 # daily_post_pipeline.py
-import fal
+import comfyui_api  # ローカル FLUX.2 [klein] + ComfyUI
 import groq
 import instagrapi
-import tweepy
 
 # 1. コンテンツプランから本日のプロンプトを取得
 today_theme = get_content_calendar(character="mika", date=today)
 prompt = f"{today_theme} {character_description}"
 
-# 2. 画像生成
-image_url = fal.generate_image(
-    model="flux-pro",
+# 2. 画像生成（ローカル FLUX.2 [klein] via ComfyUI API）
+image_url = comfyui_api.generate_image(
+    model="flux2-klein-4b",
     lora_id="mika_financial_analyst_v1",
     prompt=prompt,
     output_size=(1080, 1350)
@@ -252,8 +251,10 @@ ig.post_photo(
     schedule_time=optimal_time
 )
 
-# 5. X 投稿（別フォーマット）
-twitter.post_tweet(caption=caption, image_url=image_url, schedule_time=optimal_time + 30min)
+# 5. X 投稿 → 手動投稿に変更
+# ⚠️ X API は2026年2月7日から完全有料化
+# 手動で投稿するか、IFTTT連携を検討
+# twitter.post_tweet(caption=caption, image_url=image_url)
 
 # 6. メトリクス記録
 log_to_sheets(
@@ -481,42 +482,33 @@ Month 6: 75,000 → 100,000+ (+25,000)  — インフルエンサー認定
 
 ### 7-1. 月額運営コスト
 
-| 項目 | 単価 | 月数量 | 月額コスト | 12ヶ月 |
-|------|------|--------|----------|--------|
-| **LoRA学習（fal.ai）** | $0.50 | 30回 | $15 | $180 |
-| **画像生成（FLUX.2）** | $0.08 | 30枚 | $2.40 | $29 |
-| **Groq API（テキスト生成）** | $0.0005/token | 6,000 tokens/月 | $3 | $36 |
-| **Instagram Graph API** | $0 | - | $0 | $0 |
-| **X API v2** | $0 | - | $0 | $0 |
-| **Cloud Run/GitHub Actions** | $0 (無料枠) | - | $0 | $0 |
-| **Google Sheets API** | $0 | - | $0 | $0 |
-| **Notion API** | $0 | - | $0 | $0 |
-| **Sprout Social（モニタリング）** | $89 | 1 | $89 | $1,068 |
-| **ChatGPT Plus（補助）** | $20 | 1 | $20 | $240 |
-| **Canva Pro** | $13 | 1 | $13 | $156 |
-| **VPN/Proxy（多地域投稿）** | $5 | 1 | $5 | $60 |
-| **デスク・機器償却** | - | - | $50（概算） | $600 |
-| **その他・バッファ** | - | - | $30 | $360 |
-| **TOTAL** | - | - | **$227.40/月** | **$2,729/年** |
+| 項目 | 月額コスト |
+|------|----------|
+| **LoRA学習（Google Colab無料枠）** | $0 |
+| **画像生成（FLUX.2 [klein] ローカル）** | $0 |
+| **Groq API（テキスト生成）** | $0 |
+| **Instagram Graph API** | $0 |
+| **Google Sheets API** | $0 |
+| **TOTAL** | **$0/月** |
 
 ### 7-2. 初期投資（一回限り）
 
 | 項目 | コスト |
 |------|--------|
-| **LoRA キャラ学習（5パターン × 3キャラ = 15回）** | $7.50 |
-| **LoRA トレーニングデータセット撮影** | $300-500（プロ写真家 or セルフ + 編集） |
+| **LoRA キャラ学習（Google Colab無料枠）** | $0 |
+| **LoRA トレーニングデータセット（FLUX.2 [klein] で参照画像を自動生成）** | $0 |
 | **Notion/Spreadsheet セットアップ** | $0 |
 | **SNS アカウント開設・プロフィール写真** | $0 |
 | **Python 開発環境構築** | $0（既存） |
-| **TOTAL** | **$300-500** |
+| **TOTAL** | **$0** |
 
 ### 7-3. ROI 試算
 
 ```
-Year 1 Investment: $2,729 (運営) + $500 (初期) = $3,229
+Year 1 Investment: $0 (運営) + $0 (初期) = $0
 Year 1 Revenue:     $15,000 (Month 4-6: $20K × 3) + $200K (Month 7-12: $50K × 4) = $215,000
-Year 1 Profit:      $215,000 - $3,229 = $211,771
-ROI:                6,457%
+Year 1 Profit:      $215,000 - $0 = $215,000
+ROI:                ∞（初期投資ゼロのため）
 ```
 
 ---
@@ -547,6 +539,7 @@ ROI:                6,457%
   - [ ] メディア説明文に「AI-generated image」を記載
   - [ ] ツイートにコンテキスト警告ラベルが自動付与される可能性あり
 - **ペナルティ**: 低クレーム（実際のペナルティは少ない）
+- **⚠️ 重要**: X API は2026年2月7日から完全有料化。無料プランでの自動投稿は不可。手動投稿 or IFTTT連携に切替が必要
 
 ### 8-3. 広告・スポンサー関連規約
 
@@ -589,20 +582,35 @@ ROI:                6,457%
 
 ---
 
-## 9. 次ステップ（決定待ち）
+## 9. 決定事項（2026-03-08 確定）
 
-### 決定項目
-1. **キャラクター確定**: Mika / Rena / Sora から選択
-2. **プラットフォーム優先度**: Instagram 優先 or X 優先 or 並行
-3. **初期投資額**: $300-500 の確保確認
+### キャラクター決定
+- **採用キャラ**: **Rena（テック×ライフスタイル）** ✅
+- **理由**: 市場調査の結果、テック×LS が最も有望（規制リスク最低・競合最少・マネタイズ多様）
+- **参照**: `04_RESEARCH/2026-03-07_ai_influencer_market_survey.md`
+- **不採用**: Mika（金融規制リスク二重）、Sora（旅行系は人間インフルエンサー飽和）
+
+### コンセプト強化（調査結果ベース）
+- **差別化**: 「AIがAI活用を教える」→ AI明記が逆にブランド化
+- **統合戦略**: デジタル販売PJ（BOOTH/FANBOX）の"顔"としても機能
+- **グローバル展開**: テック系は言語の壁が低く、英語圏へのスケールアップ可能
+- **動画シフト**: 2026年後半の動画生成AI実用化に備え、静止画+Shorts並行
+
+### プラットフォーム優先度
+1. **Instagram**（メイン）→ 画像投稿・ブランド構築
+2. **TikTok**（動画展開）→ Shorts Factoryと連携
+3. **X**（手動投稿）→ API有料化のため手動運用
+
+### 初期投資額: $0（全て無料ツールで実行）
 
 ### 実装準備
-- [ ] LoRA 学習用トレーニングデータセット準備
-- [ ] Python 自動化スクリプト開発
+- [ ] LoRA 学習用トレーニングデータセット準備（FLUX.2 [klein]で参照画像自動生成）
+- [ ] Python 自動化スクリプト開発（共通エンジン化）
 - [ ] SNS アカウント作成・プロフィール設定
 - [ ] コンテンツカレンダー（初週分）作成
 
 ---
 
-**SPEC確定日**: [ユーザーが決定待ち]
+**SPEC確定日**: 2026-03-08
+**決定者**: ユーザー
 **次ドキュメント**: `TODO.md`（実装タスク分解）

@@ -215,10 +215,10 @@ else
 GROQ_API_KEY=${GROQ_API_KEY:?Set GROQ_API_KEY env var}
 YOUTUBE_API_KEY=${YOUTUBE_API_KEY:?Set YOUTUBE_API_KEY env var}
 PEXELS_API_KEY=${PEXELS_API_KEY:?Set PEXELS_API_KEY env var}
-VOICEVOX_URL=http://localhost:50021
 TARGET_THEME=auto
-VIDEO_DURATION_MIN=15
-VIDEO_DURATION_MAX=20
+VIDEO_DURATION_MIN=20
+VIDEO_DURATION_MAX=25
+CHANNEL_NAME=マネー研究所
 LANGUAGE=ja
 YOUTUBE_PUBLISH_MODE=SCHEDULE
 YOUTUBE_PUBLISH_HOUR=6
@@ -278,22 +278,17 @@ log_info "✅ パッケージインストール完了"
 log_info ""
 
 # ============================================================
-# STEP 8: VOICEVOX Docker確認・起動
+# STEP 8: Kokoro TTS 依存（espeak-ng + 日本語フォント）
 # ============================================================
 
-log_step "VOICEVOX Docker確認中..."
+log_step "Kokoro TTS 依存パッケージを確認中..."
 
-VOICEVOX_STATUS=$(sshpass -p "$EC2_PASS" ssh $SSH_OPTS "$EC2_USER@$EC2_IP" \
-    "docker inspect voicevox --format '{{.State.Running}}' 2>/dev/null || echo 'false'" 2>/dev/null)
+sshpass -p "$EC2_PASS" ssh $SSH_OPTS "$EC2_USER@$EC2_IP" \
+    "sudo yum install -y espeak-ng google-noto-sans-cjk-ttc-fonts ffmpeg 2>/dev/null || \
+     sudo apt-get install -y espeak-ng fonts-noto-cjk ffmpeg 2>/dev/null || \
+     log_warn 'パッケージインストールスキップ'" > /dev/null 2>&1
 
-if [ "$VOICEVOX_STATUS" = "true" ]; then
-    log_info "✅ VOICEVOX: 起動中"
-else
-    log_warn "VOICEVOX: 停止中。起動を試みます..."
-    sshpass -p "$EC2_PASS" ssh $SSH_OPTS "$EC2_USER@$EC2_IP" \
-        "docker start voicevox 2>/dev/null || docker run -d --name voicevox -p 50021:50021 voicevox/voicevox:latest" \
-        > /dev/null 2>&1 && log_info "✅ VOICEVOX: 起動完了" || log_warn "⚠️  VOICEVOX: 起動失敗"
-fi
+log_info "✅ espeak-ng / Noto CJK フォント / ffmpeg 確認完了"
 log_info ""
 
 # ============================================================

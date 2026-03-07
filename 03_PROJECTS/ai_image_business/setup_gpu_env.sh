@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # AI Image Generation GPU Environment Setup
-# Run on: Amazon Linux 2023, g4dn.xlarge (NVIDIA T4, 16GB VRAM)
+# Run on: Amazon Linux 2023, g6.xlarge (NVIDIA L4, 24GB VRAM)
 # Usage:  sudo bash setup_gpu_env.sh
 #
 # Idempotent: safe to run multiple times.
@@ -14,11 +14,12 @@ set -euo pipefail
 # Constants
 # -----------------------------------------------------------------------------
 VENV_DIR="/home/ec2-user/ai-image-env"
-MODEL_DIR="/home/ec2-user/models/flux1-schnell"
+MODEL_DIR_FLUX="/home/ec2-user/models/flux2-klein"
+MODEL_DIR_WAN="/home/ec2-user/models/wan22-t2v-1.3b"
 SCRIPTS_DIR="/home/ec2-user"
 LOG_FILE="/var/log/setup_gpu_env.log"
 PYTHON_VERSION="3.11"
-CUDA_VERSION="12.1"  # matches torch cu121 wheel
+CUDA_VERSION="12.4"  # matches torch cu124 wheel (L4 supports newer CUDA)
 
 # Track what we actually installed for the summary
 INSTALLED_ITEMS=()
@@ -114,7 +115,7 @@ else
     # Install CUDA toolkit 12.x (pulls in matching NVIDIA driver)
     log "Installing CUDA ${CUDA_VERSION} toolkit (this may take several minutes)..."
     dnf install -y \
-        cuda-toolkit-12-1 \
+        cuda-toolkit-12-4 \
         nvidia-driver \
         nvidia-driver-cuda \
         2>&1 | tee -a "$LOG_FILE"
@@ -180,29 +181,38 @@ log "Python environment ready: $(python --version)"
 # =============================================================================
 log_section "4. Python Packages"
 
-# PyTorch with CUDA 12.1
+# PyTorch with CUDA 12.4
 if python -c "import torch; assert torch.cuda.is_available()" &>/dev/null; then
     log "PyTorch with CUDA already installed and verified."
 else
     log "Installing PyTorch with CUDA ${CUDA_VERSION} support..."
     pip install \
         torch torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu121 \
+        --index-url https://download.pytorch.org/whl/cu124 \
         2>&1 | tee -a "$LOG_FILE"
-    mark_installed "PyTorch (cu121)"
+    mark_installed "PyTorch (cu124)"
 fi
 
 # HuggingFace / Diffusers stack
 log "Installing HuggingFace / Diffusers stack..."
 pip install \
-    diffusers \
+    "diffusers>=0.32.0" \
     transformers \
     accelerate \
     safetensors \
     huggingface_hub \
     sentencepiece \
     2>&1 | tee -a "$LOG_FILE"
-mark_installed "diffusers, transformers, accelerate, safetensors, huggingface_hub"
+mark_installed "diffusers>=0.32.0, transformers, accelerate, safetensors, huggingface_hub"
+
+# Wan 2.2 dependencies (image-to-video)
+log "Installing Wan 2.2 dependencies..."
+pip install \
+    imageio \
+    imageio-ffmpeg \
+    einops \
+    2>&1 | tee -a "$LOG_FILE"
+mark_installed "wan2.2 deps (imageio, imageio-ffmpeg, einops)"
 
 # AWS / Image / Video
 log "Installing AWS + image/video packages..."
@@ -232,9 +242,9 @@ log "PyTorch verification done."
 
 
 # =============================================================================
-# 5. Download FLUX.1-schnell Model
+# 5. Download Models (FLUX.2 klein + Wan 2.2)
 # =============================================================================
-log_section "5. Download FLUX.1-schnell Model"
+log_section "5. Download Models"
 
 # Retrieve HuggingFace token from SSM Parameter Store (non-fatal if not set)
 HF_TOKEN=""
@@ -249,41 +259,84 @@ fi
 
 if [[ -z "$HF_TOKEN" ]]; then
     log "WARNING: HuggingFace token not found in SSM (/ai-image-gen/huggingface-token)."
-    log "         FLUX.1-schnell is Apache 2.0 licensed and does NOT require a token."
+    log "         Both FLUX.2-klein and Wan2.2 are Apache 2.0 and do NOT require a token."
     log "         Token is only needed if you later use gated models (FLUX.1-dev etc.)."
 fi
 
-if [[ -d "${MODEL_DIR}" && -n "$(ls -A "${MODEL_DIR}" 2>/dev/null)" ]]; then
-    log "Model directory already populated: ${MODEL_DIR}. Skipping download."
+if [[ -n "$HF_TOKEN" ]]; then
+    HF_TOKEN_ARG="--token ${HF_TOKEN}"
 else
-    log "Creating model directory: ${MODEL_DIR}"
-    mkdir -p "${MODEL_DIR}"
-    chown -R ec2-user:ec2-user "$(dirname "${MODEL_DIR}")"
+    HF_TOKEN_ARG=""
+fi
 
-    log "Downloading black-forest-labs/FLUX.1-schnell (~12 GB fp16). This will take 10-30 minutes..."
+# --- 5a. FLUX.2 [klein] 4B (primary image generation, ~8 GB) ---
+if [[ -d "${MODEL_DIR_FLUX}" && -n "$(ls -A "${MODEL_DIR_FLUX}" 2>/dev/null)" ]]; then
+    log "FLUX.2-klein directory already populated: ${MODEL_DIR_FLUX}. Skipping download."
+else
+    log "Creating model directory: ${MODEL_DIR_FLUX}"
+    mkdir -p "${MODEL_DIR_FLUX}"
+    chown -R ec2-user:ec2-user "$(dirname "${MODEL_DIR_FLUX}")"
 
-    # Use huggingface-cli (installed via huggingface_hub)
-    # FLUX.1-schnell is Apache 2.0, no token required
-    if [[ -n "$HF_TOKEN" ]]; then
-        HF_TOKEN_ARG="--token ${HF_TOKEN}"
-    else
-        HF_TOKEN_ARG=""
-    fi
+    log "Downloading black-forest-labs/FLUX.2-klein (~8 GB). This will take 5-15 minutes..."
 
-    # Run download as ec2-user (not root) to keep correct ownership
+    # FLUX.2-klein is Apache 2.0, no token required
     # shellcheck disable=SC2086
     sudo -u ec2-user \
         "${VENV_DIR}/bin/huggingface-cli" download \
-        black-forest-labs/FLUX.1-schnell \
-        --local-dir "${MODEL_DIR}" \
+        black-forest-labs/FLUX.2-klein \
+        --local-dir "${MODEL_DIR_FLUX}" \
         --local-dir-use-symlinks False \
         ${HF_TOKEN_ARG} \
         2>&1 | tee -a "$LOG_FILE"
 
-    log "Model download complete. Checking size..."
-    du -sh "${MODEL_DIR}" | tee -a "$LOG_FILE"
-    mark_installed "FLUX.1-schnell model at ${MODEL_DIR}"
+    log "FLUX.2-klein download complete. Checking size..."
+    du -sh "${MODEL_DIR_FLUX}" | tee -a "$LOG_FILE"
+    mark_installed "FLUX.2-klein model at ${MODEL_DIR_FLUX}"
 fi
+
+# --- 5b. Wan 2.2 T2V 1.3B (image-to-video, ~5 GB) ---
+if [[ -d "${MODEL_DIR_WAN}" && -n "$(ls -A "${MODEL_DIR_WAN}" 2>/dev/null)" ]]; then
+    log "Wan2.2-T2V-1.3B directory already populated: ${MODEL_DIR_WAN}. Skipping download."
+else
+    log "Creating model directory: ${MODEL_DIR_WAN}"
+    mkdir -p "${MODEL_DIR_WAN}"
+    chown -R ec2-user:ec2-user "$(dirname "${MODEL_DIR_WAN}")"
+
+    log "Downloading Wan-AI/Wan2.2-T2V-1.3B (~5 GB). This will take 5-10 minutes..."
+
+    # Wan 2.2 is Apache 2.0, no token required
+    # shellcheck disable=SC2086
+    sudo -u ec2-user \
+        "${VENV_DIR}/bin/huggingface-cli" download \
+        Wan-AI/Wan2.2-T2V-1.3B \
+        --local-dir "${MODEL_DIR_WAN}" \
+        --local-dir-use-symlinks False \
+        ${HF_TOKEN_ARG} \
+        2>&1 | tee -a "$LOG_FILE"
+
+    log "Wan2.2-T2V-1.3B download complete. Checking size..."
+    du -sh "${MODEL_DIR_WAN}" | tee -a "$LOG_FILE"
+    mark_installed "Wan2.2-T2V-1.3B model at ${MODEL_DIR_WAN}"
+fi
+
+# --- 5c. Z-Image-Turbo (optional — uncomment to enable) ---
+# MODEL_DIR_ZTURBO="/home/ec2-user/models/z-image-turbo"
+# if [[ -d "${MODEL_DIR_ZTURBO}" && -n "$(ls -A "${MODEL_DIR_ZTURBO}" 2>/dev/null)" ]]; then
+#     log "Z-Image-Turbo directory already populated. Skipping."
+# else
+#     log "Downloading Z-Image-Turbo..."
+#     mkdir -p "${MODEL_DIR_ZTURBO}"
+#     chown -R ec2-user:ec2-user "$(dirname "${MODEL_DIR_ZTURBO}")"
+#     # shellcheck disable=SC2086
+#     sudo -u ec2-user \
+#         "${VENV_DIR}/bin/huggingface-cli" download \
+#         Z-Image-Turbo \
+#         --local-dir "${MODEL_DIR_ZTURBO}" \
+#         --local-dir-use-symlinks False \
+#         ${HF_TOKEN_ARG} \
+#         2>&1 | tee -a "$LOG_FILE"
+#     mark_installed "Z-Image-Turbo model at ${MODEL_DIR_ZTURBO}"
+# fi
 
 
 # =============================================================================
@@ -300,7 +353,7 @@ fi
 cat > "$STARTUP_SCRIPT" << 'STARTUP_HEREDOC'
 #!/bin/bash
 # =============================================================================
-# startup.sh — Runs on every boot of the g4dn.xlarge instance
+# startup.sh — Runs on every boot of the g6.xlarge instance
 #
 # Flow:
 #   1. Activate virtualenv
@@ -439,20 +492,20 @@ mark_installed "systemd service: ai-image-startup.service (enabled on boot)"
 # =============================================================================
 log_section "8. Verification — Test Image Generation"
 
-TEST_OUTPUT="/tmp/test_flux_output.png"
-TEST_SCRIPT="/tmp/test_flux.py"
+TEST_OUTPUT="/tmp/test_flux2_output.png"
+TEST_SCRIPT="/tmp/test_flux2.py"
 
 cat > "$TEST_SCRIPT" << 'PYTEST_HEREDOC'
 """
-Quick smoke test: generate 1 image with FLUX.1-schnell.
+Quick smoke test: generate 1 image with FLUX.2 [klein] 4B.
 Uses the local model if available; falls back to HuggingFace Hub (requires internet).
 """
 import sys
 import os
 import time
 
-MODEL_DIR = "/home/ec2-user/models/flux1-schnell"
-OUTPUT_PATH = "/tmp/test_flux_output.png"
+MODEL_DIR = "/home/ec2-user/models/flux2-klein"
+OUTPUT_PATH = "/tmp/test_flux2_output.png"
 
 print(f"[test] Python: {sys.version}")
 
@@ -471,7 +524,7 @@ if os.path.isdir(MODEL_DIR) and os.listdir(MODEL_DIR):
     model_source = MODEL_DIR
     print(f"[test] Loading model from local path: {model_source}")
 else:
-    model_source = "black-forest-labs/FLUX.1-schnell"
+    model_source = "black-forest-labs/FLUX.2-klein"
     print(f"[test] Local model not found. Loading from HuggingFace Hub: {model_source}")
 
 t0 = time.time()
@@ -482,9 +535,10 @@ pipe = FluxPipeline.from_pretrained(
 
 if torch.cuda.is_available():
     pipe = pipe.to("cuda")
-    # Enable attention slicing to reduce VRAM usage (safe on T4 16GB)
+    # Enable attention slicing for safety (24GB L4 has more headroom, but this
+    # keeps peak VRAM in check when running multiple models sequentially)
     pipe.enable_attention_slicing()
-    print("[test] Pipeline loaded on CUDA")
+    print("[test] Pipeline loaded on CUDA (L4 24GB)")
 else:
     print("[test] WARNING: Running on CPU (slow). GPU not detected.")
 
@@ -496,8 +550,8 @@ result = pipe(
     prompt="A futuristic Tokyo skyline at golden hour, cinematic, 16:9 aspect ratio, high quality",
     width=1280,
     height=720,
-    num_inference_steps=4,   # schnell is optimized for 1-4 steps
-    guidance_scale=0.0,      # schnell uses guidance_scale=0
+    num_inference_steps=4,
+    guidance_scale=0.0,
     max_sequence_length=256,
 )
 t2 = time.time()
@@ -507,7 +561,7 @@ image = result.images[0]
 image.save(OUTPUT_PATH)
 print(f"[test] Test image saved: {OUTPUT_PATH}")
 print(f"[test] Image size: {image.size}")
-print("[test] PASSED — FLUX.1-schnell smoke test complete.")
+print("[test] PASSED — FLUX.2 klein smoke test complete.")
 PYTEST_HEREDOC
 
 log "Running smoke test (generates 1 image)..."
@@ -536,7 +590,8 @@ echo " SETUP COMPLETE — Summary"
 echo "============================================================"
 echo " Log file   : $LOG_FILE"
 echo " Virtualenv : $VENV_DIR"
-echo " Models     : $MODEL_DIR"
+echo " Models     : $MODEL_DIR_FLUX"
+echo "              $MODEL_DIR_WAN"
 echo " startup.sh : ${SCRIPTS_DIR}/startup.sh"
 echo ""
 echo " Installed / Configured:"
@@ -550,7 +605,7 @@ echo "   2. Store SSM parameters:"
 echo "      aws ssm put-parameter --name '/ai-image-gen/s3-bucket' \\"
 echo "          --value 'your-bucket-name' --type String"
 echo "      aws ssm put-parameter --name '/ai-image-gen/huggingface-token' \\"
-echo "          --value 'hf_xxx' --type SecureString   # optional for FLUX.1-schnell"
+echo "          --value 'hf_xxx' --type SecureString   # optional for FLUX.2/Wan2.2 (both Apache 2.0)"
 echo "   3. Upload generate_images.py to ${SCRIPTS_DIR}/"
 echo "   4. Upload pending.json to s3://BUCKET/prompts/pending.json"
 echo "   5. To test manually:"

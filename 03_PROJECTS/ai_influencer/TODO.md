@@ -46,11 +46,11 @@
   - **予想時間**: 2時間/day × 2-3day = 4-6時間
   - **機材コスト**: $0（スマートフォン既存利用）
 
-#### 外注オプション（価格: $300-500）
-- [ ] **プロ写真家リクエスト**: Fiverr / Upwork で「AI training dataset」で検索
-  - 単価: $200-400
-  - ターンアラウンド: 3-5日
-  - 品質: 高い一貫性
+#### AI生成オプション（¥0）
+- [ ] **FLUX.2 [klein] で参照画像を自動生成**: ComfyUI でバリエーション画像を生成
+  - コスト: ¥0（ローカル実行）
+  - ターンアラウンド: 数時間
+  - 品質: 十分な一貫性（LoRA学習用には最適）
 
 **成果物**: `00_INBOX/lora_training_dataset_<character>.zip` (100MB 程度)
 
@@ -61,10 +61,10 @@
 **担当**: Claude（実装） / ユーザー（テスト）
 
 #### スクリプト 1: `generate_image.py`
-**機能**: fal.ai API を通じた画像生成
+**機能**: ローカル FLUX.2 [klein] + ComfyUI API を通じた画像生成
 ```python
 # 疑似コード
-import fal
+import comfyui_api
 from datetime import datetime
 
 def generate_daily_image(character: str, theme: str, expression: str):
@@ -76,8 +76,8 @@ def generate_daily_image(character: str, theme: str, expression: str):
     lora_id = get_lora_id(character)  # 学習済み LoRA ID
     prompt = build_prompt(character, theme, expression)
 
-    image_url = fal.generate_image(
-        model="flux-pro",
+    image_url = comfyui_api.generate_image(
+        model="flux2-klein-4b",
         lora_id=lora_id,
         prompt=prompt,
         output_format="jpeg",
@@ -92,8 +92,8 @@ generate_daily_image("mika", "weekly_forecast", "serious")
 ```
 
 **実装チェック**:
-- [ ] fal.ai アカウント作成 & API キー取得
-- [ ] `requirements.txt` に `fal-ai` を追加
+- [ ] ComfyUI インストール & FLUX.2 [klein] 4B モデルダウンロード
+- [ ] `requirements.txt` に `comfyui-api` を追加
 - [ ] プロンプトテンプレート 5-6 パターンを定義（表情別）
 - [ ] 出力ディレクトリ構造を定義
 
@@ -187,49 +187,32 @@ post_to_instagram(
 - [ ] スケジュール投稿の仕組み決定（24時間後投稿 or Cloud Scheduler）
 
 #### スクリプト 4: `post_to_x.py`
-**機能**: X API v2 で投稿
+**⚠️ X API は2026年2月7日から完全有料化。手動投稿 or IFTTT連携に変更**
+
 ```python
-# 疑似コード
-import tweepy
+# ⚠️ X API v2 は2026年2月7日から有料化
+# 自動投稿は無料プランでは不可
+# 代替案:
+#   1. 手動投稿（画像+キャプションを生成し、手動でXに投稿）
+#   2. IFTTT連携（Instagram投稿をトリガーにXに自動共有）
+#   3. 将来的にX API有料プランを検討
 
-def post_to_x(image_url: str, caption: str, schedule_offset_minutes: int = 30):
+def prepare_x_post(image_url: str, caption: str):
     """
-    - image_url: 生成済み画像 URL
-    - caption: 投稿文（280字以内に短縮）
-    - schedule_offset_minutes: Instagram投稿の何分後に投稿するか
-
-    注: X API v2 はスケジュール機能がないため、30分後に別プロセスで実行
+    X用の投稿内容を準備（手動投稿用）
+    - 投稿文を280字以内に短縮
+    - 画像パスを出力
     """
-
-    client = tweepy.Client(
-        bearer_token=os.getenv("X_BEARER_TOKEN"),
-        consumer_key=os.getenv("X_CONSUMER_KEY"),
-        consumer_secret=os.getenv("X_CONSUMER_SECRET"),
-        access_token=os.getenv("X_ACCESS_TOKEN"),
-        access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET")
-    )
-
-    # 画像アップロード
-    media = client.upload_media(filename=image_url)
-
-    # 投稿文を 280 字以内に短縮
     short_caption = caption[:280]
-
-    response = client.create_tweet(
-        text=short_caption,
-        media_ids=[media.data['media_key']]
-    )
-
-    return response.data['id']
-
-# 実行例（30分後実行用）
-post_to_x(image_url="outputs/2026-03-17_mika_weekly.jpg", caption="こんにちは。今週の相場は...")
+    print(f"[X手動投稿用] キャプション: {short_caption}")
+    print(f"[X手動投稿用] 画像: {image_url}")
+    return short_caption, image_url
 ```
 
 **実装チェック**:
-- [ ] X API v2 アクセス取得（Verified Account 必須）
-- [ ] Bearer Token + OAuth 1.0a 認証設定
-- [ ] Cloud Scheduler で 30 分遅延実行を設定
+- [ ] IFTTT アカウント作成 & Instagram→X 連携設定（無料）
+- [ ] 手動投稿用のテンプレート準備
+- [ ] ⚠️ X API有料プラン（$100/月〜）は現時点では不採用
 
 #### スクリプト 5: `daily_pipeline.py`（オーケストレーション）
 **機能**: 上記スクリプト 1-4 を順次実行
@@ -333,7 +316,7 @@ if __name__ == "__main__":
 
 **実装チェック**:
 - [ ] Instagram Graph API Insights 権限確認
-- [ ] X API v2 Metrics 権限確認
+- [ ] ⚠️ X API v2 は有料化のためメトリクス取得不可 → X分析は手動確認
 - [ ] Google Sheets 追記権限確認
 
 **成果物**:
@@ -343,7 +326,7 @@ if __name__ == "__main__":
 - [ ] `src/post_to_x.py`
 - [ ] `src/daily_pipeline.py`
 - [ ] `src/monitor_engagement.py`
-- [ ] `requirements.txt`（fal-ai, groq, instagrapi, tweepy, google-sheets等）
+- [ ] `requirements.txt`（comfyui-api, groq, instagrapi, google-sheets等）
 - [ ] `.env.example`（API キーテンプレート）
 
 ---
@@ -376,6 +359,7 @@ if __name__ == "__main__":
   ```
 - [ ] **アバター**: Instagram と同一（一貫性）
 - [ ] **ヘッダー**: 金融チャートのビジュアル（1500x500px）
+- **⚠️ 注意**: X API は2026年2月7日から完全有料化。自動投稿は不可。手動投稿 or IFTTT連携で運用
 
 **成果物**: SNS アカウント 2 個（Instagram + X）設定完了
 
@@ -412,21 +396,23 @@ if __name__ == "__main__":
 
 ### M1-1: LoRA 学習実行 & モデルテスト
 **期限**: Mar 17（木）
-**担当**: Claude（実装と fal.ai API 実行）
+**担当**: Claude（実装と Google Colab / ローカル実行）
 
 - [ ] **データセット確認**: M0-2 で準備した 50-100 枚が `/data/training/` に揃っているか
-- [ ] **fal.ai アカウント確認**: API キー正常性確認
+- [ ] **Google Colab or ローカル環境確認**: T4 GPU (16GB) or ローカルGPU (6-12GB VRAM) の動作確認
 - [ ] **LoRA 学習実行**:
   ```bash
+  # Google Colab or ローカル環境で実行
   python src/train_lora.py \
     --character mika \
     --dataset_path data/training/mika_50 \
     --model_id lora_mika_v1 \
     --learning_rate 0.0002 \
-    --iterations 800
+    --iterations 800 \
+    --base_model flux2-klein-4b
   ```
-- [ ] **学習時間**: 5-15 分（fal.ai クラウド実行）
-- [ ] **コスト**: $0.50/実行 × 1 = $0.50
+- [ ] **学習時間**: 5-15 分（Colab T4 or ローカルGPU）
+- [ ] **コスト**: ¥0
 - [ ] **モデルID記録**: `lora_mika_v1` を `characters.py` に登録
 
 - [ ] **テスト生成 10 枚**:
@@ -479,9 +465,9 @@ python src/batch_generate.py \
    ```
 
 **コスト**:
-- 画像生成: 30 × $0.08 = $2.40
-- Groq API: 30 × (300 tokens) × $0.0005 = $4.50
-- **合計**: $6.90
+- 画像生成: ¥0（ローカル FLUX.2 [klein] 生成）
+- Groq API: ¥0（Groq無料枠）
+- **合計**: ¥0
 
 **QA チェック**:
 - [ ] 30 枚すべてがダウンロード完了したか確認
@@ -529,21 +515,25 @@ python src/daily_pipeline.py \
 
 ---
 
-### M1-4: X（Twitter）投稿開始（1 週間 7 本、30 分遅延）
+### M1-4: X（Twitter）投稿開始（1 週間 7 本、手動投稿）
 **期限**: Mar 17（木）開始 → Mar 23（月）まで
-**担当**: Claude（自動スケジューリング）
+**担当**: ユーザー（手動投稿） / Claude（投稿内容準備）
+
+**⚠️ X API は2026年2月7日から完全有料化。手動投稿 or IFTTT連携で運用**
 
 **投稿スケジュール**:
 ```
-Instagram 投稿 → 30 分後に X でも投稿（テキスト調整版）
+Instagram 投稿後 → 手動で X にも投稿（テキスト調整版）
+※ IFTTT連携設定済みの場合は自動共有
 ```
 
-**実装**:
+**投稿準備**:
 ```bash
+# X用の投稿内容を生成（手動投稿用）
 python src/post_to_x.py \
   --image_url outputs/batch_30/2026-03-17_mika_weekly_serious.jpg \
-  --caption_file outputs/batch_30/2026-03-17_mika_weekly_serious.txt \
-  --delay_minutes 30
+  --caption_file outputs/batch_30/2026-03-17_mika_weekly_serious.txt
+# → コンソールに投稿内容が表示されるので、手動でXに投稿
 ```
 
 **キャプション調整**:
@@ -1007,8 +997,8 @@ Google Data Studio で以下をダッシュボード化:
    - [ ] 並行（両プラットフォーム）
 
 4. **初期投資予算確保**:
-   - [ ] 初期投資 $300-500（撮影 + LoRA 学習）
-   - [ ] 月額運営 $227（ツール利用料）
+   - [ ] 初期投資 ¥0（全て無料ツールで実行）
+   - [ ] 月額運営 ¥0（全て無料ツール・API で運用）
    - [ ] Year 1 目標 $133,200 達成への承認
 
 ---

@@ -7,7 +7,7 @@
 
 ## 1. 概要
 
-g4dn.xlarge スポットインスタンスで FLUX.1-schnell を実行し、YouTube動画用のAI画像を大量生成。
+g6.xlarge スポットインスタンスで FLUX.2 [klein] 4B を実行し、YouTube動画用のAI画像を大量生成。
 生成画像は S3 経由で既存 t4g.medium パイプラインに受け渡す。
 
 ---
@@ -15,9 +15,10 @@ g4dn.xlarge スポットインスタンスで FLUX.1-schnell を実行し、YouT
 ## 2. アーキテクチャ
 
 ```
-[手動起動] g4dn.xlarge (スポット / T4 GPU 16GB)
+[手動起動] g6.xlarge (スポット / NVIDIA L4 24GB)
     │
-    ├── FLUX.1-schnell で画像バッチ生成
+    ├── FLUX.2 [klein] 4B で画像バッチ生成
+    ├── Wan 2.2 (1.3B) で image-to-video 変換（オプション）
     ├── Ken Burns 効果で動画クリップ生成（オプション）
     ├── LoRA 学習（将来対応）
     │
@@ -59,20 +60,25 @@ SSMでの接続 + S3アクセスのみ。
 
 | 項目 | 値 |
 |------|-----|
-| インスタンスタイプ | `g4dn.xlarge` |
-| GPU | NVIDIA T4 (16GB VRAM) |
+| インスタンスタイプ | `g6.xlarge` |
+| GPU | NVIDIA L4 (24GB VRAM) |
 | vCPU | 4 |
 | RAM | 16GB |
-| ストレージ | 100GB gp3 (FLUX.1モデル約12GB + 生成画像) |
+| ストレージ | 100GB gp3 (FLUX.2 klein ~8GB + Wan 2.2 ~3GB + 生成画像) |
 | AMI | Amazon Linux 2023 (x86_64) |
 | 購入オプション | スポットインスタンス |
-| スポット価格 | ~$0.22/h (東京リージョン) |
+| スポット価格 | ~$0.09-0.15/h (リージョン依存、東京 ~$0.12/h) |
 | 課金単位 | **秒単位** (最小1分) |
 
 ### g4ad.xlarge を選ばない理由
 - AMD Radeon Pro V520 (8GB VRAM)
-- **CUDA非対応** → PyTorch/FLUX.1/Stable Diffusion が動作しない
+- **CUDA非対応** → PyTorch/FLUX.2/Stable Diffusion が動作しない
 - AI画像生成はNVIDIA CUDA必須
+
+### g6.xlarge を選ぶ理由 (vs g4dn.xlarge)
+- g6.xlarge: NVIDIA L4 (24GB VRAM) — FLUX.2 klein (~8GB) + Wan 2.2 (~3GB) を余裕で搭載
+- g4dn.xlarge: NVIDIA T4 (16GB VRAM) — 旧世代、スポット価格も g6 と大差なし
+- L4 は T4 の約2-3倍の推論性能（Ada Lovelace世代）
 
 ---
 
@@ -80,27 +86,37 @@ SSMでの接続 + S3アクセスのみ。
 
 ```bash
 # 1. NVIDIA ドライバ + CUDA
-nvidia-driver-535 + CUDA 12.x
+nvidia-driver-550+ (L4対応) + CUDA 12.x
 
 # 2. Python 環境
 python3.11 + pip
 
-# 3. AI画像生成
+# 3. AI画像生成 (共通)
 torch==2.3+ (CUDA 12.x)
 diffusers  (HuggingFace)
 transformers
 accelerate
 safetensors
 
-# 4. FLUX.1-schnell
-black-forest-labs/FLUX.1-schnell (HuggingFace からダウンロード)
-→ 約 12GB (fp16)
+# 4. FLUX.2 [klein] 4B (Apache 2.0)
+black-forest-labs/FLUX.2-klein (HuggingFace からダウンロード)
+→ 約 8GB (fp16)
+→ L4 で ~2-6秒/枚 の高速生成
 
-# 5. 動画化 (オプション)
+# 5. Wan 2.2 (1.3B) — image-to-video (Apache 2.0)
+Wan-AI/Wan2.2-T2V-1.3B (HuggingFace)
+→ 約 3GB、~8GB VRAM で動作
+→ AI生成画像 → 短尺動画クリップへの変換
+
+# 6. Z-Image-Turbo (オプション — 日本語テキスト入りサムネイル)
+→ 日本語テキストレンダリング対応モデル
+→ サムネイル生成に特化して利用
+
+# 7. 動画化 (Ken Burns等)
 opencv-python
 moviepy
 
-# 6. AWS連携
+# 8. AWS連携
 boto3
 awscli
 ```
@@ -146,10 +162,11 @@ S3: s3://ai-image-gen-bucket/output/{batch_id}/
 ### 処理フロー
 ```
 1. S3 から prompts/pending.json を取得
-2. FLUX.1-schnell でバッチ生成
-3. 生成画像を S3 にアップロード
-4. manifest.json を S3 にアップロード
-5. pending.json を processed/ に移動
+2. FLUX.2 [klein] 4B でバッチ生成
+3. (オプション) Wan 2.2 で image-to-video 変換
+4. 生成画像/動画を S3 にアップロード
+5. manifest.json を S3 にアップロード
+6. pending.json を processed/ に移動
 ```
 
 ---
@@ -221,8 +238,9 @@ s3://ai-image-gen-{account-id}/
 │   ├── pending.json      ← t4g.medium が配置
 │   └── processed/        ← 処理済み
 ├── output/
-│   └── {batch_id}/       ← g4dn.xlarge が配置
+│   └── {batch_id}/       ← g6.xlarge が配置
 │       ├── *.png
+│       ├── *.mp4          ← Wan 2.2 動画出力
 │       └── manifest.json
 └── models/               ← LoRA モデル保存 (将来)
 ```
@@ -231,18 +249,19 @@ s3://ai-image-gen-{account-id}/
 
 ## 11. コスト試算
 
-### 月次 (月1回1.5h稼働)
+### 月次 (月2-3回、各1.5h稼働)
 | 項目 | コスト |
 |------|-------|
-| g4dn.xlarge スポット (1.5h) | $0.33 (≒50円) |
+| g6.xlarge スポット (1.5h × 2-3回) | $0.27-0.54 (≒50-80円) |
 | S3 (1GB保存 + 転送) | $0.03 |
 | CloudWatch + SNS | $0.00 (無料枠内) |
-| **合計** | **約53円/月** |
+| **合計** | **約50-80円/月** |
 
 ### 生成能力
-| 稼働時間 | 生成枚数 | 用途 |
+| 稼働時間 | 生成枚数 | 備考 |
 |---------|---------|------|
-| 1.5h | 500-1000枚 | YouTube 8本分 × 3枚 = 24枚で十分 |
+| 1.5h | 1000-2000枚 | FLUX.2 klein on L4: ~2-6秒/枚 (旧T4では10-15秒/枚) |
+| — | YouTube 8本分 × 3枚 = 24枚で十分 | 余剰分はストック可 |
 
 ---
 
@@ -251,7 +270,7 @@ s3://ai-image-gen-{account-id}/
 | 項目 | 対策 |
 |------|------|
 | SSH | 不要（SSM Session Manager） |
-| SG | アウトバウンドのみ（S3, PyPI, HuggingFace） |
+| SG | アウトバウンドのみ（S3, PyPI, HuggingFace, Wan-AI） |
 | IAM | 最小権限（S3 put/get + EC2 stop のみ） |
 | HuggingFace Token | SSM Parameter Store に保存 |
 | スポット中断 | データは S3 に即アップロード → 中断されても画像は保持 |
@@ -265,13 +284,16 @@ s3://ai-image-gen-{account-id}/
 # 1. CloudFormation でインフラ構築
 aws cloudformation deploy --template-file gpu_image_gen_stack.yaml ...
 
-# 2. g4dn.xlarge を手動起動
+# 2. g6.xlarge を手動起動
 aws ec2 run-instances --launch-template ...
 
 # 3. SSH/SSM で接続 → セットアップスクリプト実行
 ./setup_gpu_env.sh
 
-# 4. FLUX.1-schnell モデルダウンロード (初回のみ、約12GB)
+# 4. モデルダウンロード (初回のみ)
+#    - FLUX.2 [klein] 4B: ~8GB
+#    - Wan 2.2 (1.3B): ~3GB
+#    - Z-Image-Turbo: (オプション)
 python download_model.py
 
 # 5. テスト生成

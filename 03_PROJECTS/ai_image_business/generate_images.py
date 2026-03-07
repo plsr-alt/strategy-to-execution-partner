@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================================
-# AI画像バッチ生成スクリプト — FLUX.1-schnell (GPU)
+# AI画像バッチ生成スクリプト — FLUX.2-klein 4B (GPU / NVIDIA L4 24GB VRAM)
 # ============================================================
 # Usage:
 #   python generate_images.py --from-s3
@@ -32,7 +32,7 @@ load_dotenv()
 # 設定・定数
 # ============================================================
 
-MODEL_PATH    = os.getenv("FLUX_MODEL_PATH", "/home/ec2-user/models/flux1-schnell")
+MODEL_PATH    = os.getenv("FLUX_MODEL_PATH", "/home/ec2-user/models/flux2-klein")
 OUTPUT_DIR    = Path(os.getenv("OUTPUT_DIR", "/home/ec2-user/output"))
 S3_BUCKET     = os.getenv("AI_IMAGE_S3_BUCKET", "")
 S3_PROMPTS_KEY = "prompts/pending.json"
@@ -42,8 +42,8 @@ LOG_LEVEL     = os.getenv("LOG_LEVEL", "INFO")
 # デフォルト生成パラメータ
 DEFAULT_WIDTH            = 1280
 DEFAULT_HEIGHT           = 720
-DEFAULT_GUIDANCE_SCALE   = 3.5
-DEFAULT_INFERENCE_STEPS  = 4   # FLUX.1-schnell は蒸留モデル: 4ステップで十分
+DEFAULT_GUIDANCE_SCALE   = 0     # FLUX.2-klein は蒸留モデル: CFG不要 (guidance_scale=0)
+DEFAULT_INFERENCE_STEPS  = 4    # FLUX.2-klein 4B: sub-second on L4, 4ステップで十分
 DEFAULT_NUM_IMAGES       = 1
 
 # OOM 発生時の縮小解像度（縦横ともに 75%）
@@ -57,7 +57,7 @@ TEST_PROMPT = {
     "width": 1280,
     "height": 720,
     "num_images": 1,
-    "guidance_scale": 3.5,
+    "guidance_scale": 0,
     "num_inference_steps": 4,
 }
 
@@ -90,12 +90,13 @@ def setup_logging() -> logging.Logger:
 
 def load_model():
     """
-    FLUX.1-schnell をローカルパスから fp16 でロード。
-    T4 (16GB VRAM) での推論を前提とした設定。
+    FLUX.2-klein 4B をローカルパスから fp16 でロード。
+    NVIDIA L4 (24GB VRAM) での推論を前提とした設定。
+    4Bパラメータの蒸留モデルのため、L4上でsub-second推論が可能。
     """
     from diffusers import FluxPipeline
 
-    logger.info(f"Loading FLUX.1-schnell from: {MODEL_PATH}")
+    logger.info(f"Loading FLUX.2-klein 4B from: {MODEL_PATH}")
     logger.info(f"CUDA available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
         logger.info(f"GPU: {torch.cuda.get_device_name(0)}, "
@@ -110,7 +111,7 @@ def load_model():
 
     if torch.cuda.is_available():
         pipe = pipe.to("cuda")
-        # VRAM 節約: attention slicing を有効化
+        # L4 24GB VRAM: 4Bモデルなので余裕あり。attention slicing で追加マージン確保
         pipe.enable_attention_slicing()
         # xformers が使えれば利用（高速化・省メモリ）
         try:
@@ -168,7 +169,7 @@ def generate_single(
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
-            # FLUX.1-schnell: guidance_scale=0 が推奨設定
+            # FLUX.2-klein: guidance_scale=0 が推奨設定
             # （蒸留モデルのため classifier-free guidance を使わない）
             result = pipe(
                 prompt=prompt,
@@ -196,7 +197,8 @@ def generate_single(
             else:
                 raise RuntimeError(
                     f"OOM even at reduced resolution ({width}x{height}). "
-                    "Consider reducing num_images or inference steps."
+                    "L4 has 24GB VRAM — check for other GPU processes or "
+                    "consider reducing num_images or inference steps."
                 )
 
     elapsed = time.time() - start
@@ -369,7 +371,7 @@ def main() -> int:
     logger = setup_logging()
 
     parser = argparse.ArgumentParser(
-        description="FLUX.1-schnell AI画像バッチ生成スクリプト",
+        description="FLUX.2-klein 4B AI画像バッチ生成スクリプト (NVIDIA L4 24GB)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使い方:
@@ -398,7 +400,7 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("=" * 60)
-    logger.info("AI Image Generator — FLUX.1-schnell")
+    logger.info("AI Image Generator — FLUX.2-klein 4B (L4 24GB)")
     logger.info("=" * 60)
     logger.info(f"Output dir : {output_dir}")
     logger.info(f"Model path : {args.model}")
